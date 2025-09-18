@@ -1,4 +1,4 @@
-/ Firebaseの初期化
+// Firebaseの初期化
 const firebaseConfig = {
   apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
   authDomain: "basketball-ansys.firebaseapp.com",
@@ -130,9 +130,16 @@ async function loadVideoList() {
     const li = document.createElement('li');
     // 日時表示（Firestoreのtimestamp型をDateに変換）
     let dateStr = '';
-    if (data.timestamp && data.timestamp.toDate) {
-      const d = data.timestamp.toDate();
-      dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    if (data.timestamp) {
+      let d;
+      if (typeof data.timestamp === 'object' && typeof data.timestamp.toDate === 'function') {
+        d = data.timestamp.toDate();
+      } else if (typeof data.timestamp === 'string' || typeof data.timestamp === 'number') {
+        d = new Date(data.timestamp);
+      }
+      if (d) {
+        dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+      }
     }
     li.innerHTML = `<b>${data.user}</b>: <a href="#" data-url="${data.url}">${data.filename}</a> <span style="color:#888;font-size:0.95em;margin-left:8px;">${dateStr}</span>`;
     li.querySelector('a').addEventListener('click', (e) => {
