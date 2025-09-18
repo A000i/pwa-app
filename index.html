@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コメントテスト</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <h1>コメントテスト</h1>
+    <div>
+        <input type="text" id="commentInput" placeholder="コメントを入力">
+        <button id="sendComment">送信</button>
+    </div>
+    <div>
+        <h2>コメント一覧</h2>
+        <ul id="commentList"></ul>
+    </div>
+    <div>
+        <label for="videoInput">動画ファイルを選択：</label>
+        <input type="file" id="videoInput" accept="video/*">
+    </div>
+    <div style="display: flex; gap: 20px; align-items: flex-start;">
+        <div>
+            <div>
+                <button id="playBtn" style="display:none;">再生</button>
+                <button id="pauseBtn" style="display:none;">停止</button>
+            </div>
+            <video id="videoPlayer" width="480" controls style="display:none;"></video>
+        </div>
+        <div>
+            <div style="height:38px;"></div>
+            <canvas id="poseCanvas" width="480" height="360" style="border:1px solid #ccc; display:none;"></canvas>
+            <div id="poseLoading" style="display:none;">骨格推定中...</div>
+        </div>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>
