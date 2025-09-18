@@ -15,20 +15,12 @@ const storage = firebase.storage();
 // コメント一覧ul要素を取得
 const list = document.getElementById('commentList');
 
-// Googleログインボタン生成
-const loginBtn = document.createElement('button');
-loginBtn.textContent = 'Googleでログイン';
-document.body.insertBefore(loginBtn, document.body.firstChild);
-
-// Googleログアウトボタン生成
-const logoutBtn = document.createElement('button');
-logoutBtn.textContent = 'ログアウト';
-logoutBtn.style.display = 'none';
-document.body.insertBefore(logoutBtn, loginBtn.nextSibling);
-
+// GoogleログインUI（index.html側のloginAreaを利用）
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const loginInfo = document.getElementById('loginInfo');
 let currentUser = null;
 
-// コメント欄・送信ボタンを最初は無効化
 const sendBtn = document.getElementById('sendComment');
 const input = document.getElementById('commentInput');
 sendBtn.disabled = true;
@@ -48,28 +40,18 @@ auth.onAuthStateChanged(user => {
     currentUser = user;
     loginBtn.style.display = 'none';
     logoutBtn.style.display = '';
-    showLoginUser(user.displayName);
+    loginInfo.textContent = `${user.displayName} がログイン中です。`;
     sendBtn.disabled = false;
     input.disabled = false;
   } else {
     currentUser = null;
     loginBtn.style.display = '';
     logoutBtn.style.display = 'none';
-    showLoginUser('未ログイン');
+    loginInfo.textContent = '未ログイン';
     sendBtn.disabled = true;
     input.disabled = true;
   }
 });
-
-function showLoginUser(name) {
-  let info = document.getElementById('loginInfo');
-  if (!info) {
-    info = document.createElement('div');
-    info.id = 'loginInfo';
-    document.body.insertBefore(info, document.body.children[1]);
-  }
-  info.textContent = `${name} がログイン中です。`;
-}
 
 // コメント送信
 sendBtn.addEventListener('click', async () => {
@@ -137,10 +119,8 @@ videoInput.addEventListener('change', async (e) => {
 });
 
 // 動画一覧表示
-const videoListDiv = document.createElement('div');
-videoListDiv.innerHTML = '<h2>アップロード済み動画一覧</h2><ul id="videoList"></ul>';
-document.body.insertBefore(videoListDiv, videoInput.parentNode.nextSibling);
-const videoList = document.getElementById('videoList');
+// ダウンロードした動画一覧ul要素を取得
+const videoList = document.getElementById('downloadedVideoList');
 
 async function loadVideoList() {
   videoList.innerHTML = '';
