@@ -1,3 +1,5 @@
+let currentVideoFilename = null; // 選択中の動画ファイル名
+
 // Firebaseの初期化
 const firebaseConfig = {
   apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
@@ -60,11 +62,16 @@ sendBtn.addEventListener('click', async () => {
     alert('Googleでログインしてください');
     return;
   }
+  if (!currentVideoFilename) {
+    alert('動画を選択してください');
+    return;
+  }
   if (text) {
     await db.collection('comments').add({
       text: text,
       user: currentUser.displayName,
-      timestamp: new Date()
+      timestamp: new Date(),
+      video: currentVideoFilename
     });
     input.value = '';
     loadComments();
@@ -74,11 +81,40 @@ sendBtn.addEventListener('click', async () => {
 // コメント一覧取得
 async function loadComments() {
   list.innerHTML = '';
-  const snapshot = await db.collection('comments').orderBy('timestamp', 'desc').get();
+  if (!currentVideoFilename) return;
+  console.log('currentVideoFilename:', currentVideoFilename); // 追加
+  const snapshot = await db.collection('comments')
+    .where('video', '==', currentVideoFilename)
+    .orderBy('timestamp', 'desc').get();
+  console.log('comments count:', snapshot.size); // 追加
   snapshot.forEach(doc => {
     const data = doc.data();
+    console.log('comment data:', data); // 追加
     const li = document.createElement('li');
-    li.textContent = `${data.user || '匿名'}: ${data.text}`;
+    // mm:ss形式のタイムスタンプ検出＆リンク化
+    const match = data.text.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
+    if (match) {
+  const timeStr = match[1];
+  const commentText = match[2];
+  const [min, sec] = timeStr.split(':').map(Number);
+  const seconds = min * 60 + sec;
+  const timeLink = document.createElement('a');
+  timeLink.href = '#';
+  timeLink.textContent = timeStr;
+  timeLink.style.color = '#2196f3';
+  timeLink.style.textDecoration = 'underline';
+  timeLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    videoPlayer.currentTime = seconds;
+    videoPlayer.play();
+  });
+  // 表示形式：ユーザー名: タイムスタンプ コメント
+  li.appendChild(document.createTextNode(`${data.user || '匿名'}: `));
+  li.appendChild(timeLink);
+  li.appendChild(document.createTextNode(' ' + (commentText || '')));
+} else {
+  li.textContent = `${data.user || '匿名'}: ${data.text}`;
+}
     list.appendChild(li);
   });
 }
@@ -149,6 +185,8 @@ async function loadVideoList() {
       playBtn.style.display = '';
       pauseBtn.style.display = '';
       videoPlayer.play();
+      currentVideoFilename = data.filename;
+      loadComments();
     });
     videoList.appendChild(li);
   });
@@ -199,6 +237,13 @@ pauseBtn.addEventListener('click', () => {
   videoPlayer.pause();
 });
 
+function estimatePoseLoop() {
+  // ここに骨格推定処理を記述
+  // 例: poseCanvasに推定結果を描画するなど
+  // 実装例がなければ何もせず return でもOK
+  return;
+}
+
 videoPlayer.addEventListener('loadeddata', () => {
   // 動画の実サイズでcanvasを設定
   poseCanvas.width = videoPlayer.videoWidth || 480;
@@ -206,12 +251,14 @@ videoPlayer.addEventListener('loadeddata', () => {
 });
 
 videoPlayer.addEventListener('play', () => {
-  poseEstimateActive = true;
-  estimatePoseLoop();
+poseEstimateActive = true;
+estimatePoseLoop();
 });
+
 videoPlayer.addEventListener('pause', () => {
   poseEstimateActive = false;
 });
 videoPlayer.addEventListener('ended', () => {
   poseEstimateActive = false;
 });
+
