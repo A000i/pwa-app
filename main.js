@@ -1,5 +1,3 @@
-let currentVideoFilename = null; // 選択中の動画ファイル名
-
 // Firebaseの初期化
 const firebaseConfig = {
   apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
@@ -17,12 +15,20 @@ const storage = firebase.storage();
 // コメント一覧ul要素を取得
 const list = document.getElementById('commentList');
 
-// GoogleログインUI（index.html側のloginAreaを利用）
-const loginBtn = document.getElementById('loginBtn');
-const logoutBtn = document.getElementById('logoutBtn');
-const loginInfo = document.getElementById('loginInfo');
+// Googleログインボタン生成
+const loginBtn = document.createElement('button');
+loginBtn.textContent = 'Googleでログイン';
+document.body.insertBefore(loginBtn, document.body.firstChild);
+
+// Googleログアウトボタン生成
+const logoutBtn = document.createElement('button');
+logoutBtn.textContent = 'ログアウト';
+logoutBtn.style.display = 'none';
+document.body.insertBefore(logoutBtn, loginBtn.nextSibling);
+
 let currentUser = null;
 
+// コメント欄・送信ボタンを最初は無効化
 const sendBtn = document.getElementById('sendComment');
 const input = document.getElementById('commentInput');
 sendBtn.disabled = true;
@@ -42,18 +48,28 @@ auth.onAuthStateChanged(user => {
     currentUser = user;
     loginBtn.style.display = 'none';
     logoutBtn.style.display = '';
-    loginInfo.textContent = `${user.displayName} がログイン中です。`;
+    showLoginUser(user.displayName);
     sendBtn.disabled = false;
     input.disabled = false;
   } else {
     currentUser = null;
     loginBtn.style.display = '';
     logoutBtn.style.display = 'none';
-    loginInfo.textContent = '未ログイン';
+    showLoginUser('未ログイン');
     sendBtn.disabled = true;
     input.disabled = true;
   }
 });
+
+function showLoginUser(name) {
+  let info = document.getElementById('loginInfo');
+  if (!info) {
+    info = document.createElement('div');
+    info.id = 'loginInfo';
+    document.body.insertBefore(info, document.body.children[1]);
+  }
+  info.textContent = `${name} がログイン中です。`;
+}
 
 // コメント送信
 sendBtn.addEventListener('click', async () => {
@@ -62,16 +78,11 @@ sendBtn.addEventListener('click', async () => {
     alert('Googleでログインしてください');
     return;
   }
-  if (!currentVideoFilename) {
-    alert('動画を選択してください');
-    return;
-  }
   if (text) {
     await db.collection('comments').add({
       text: text,
       user: currentUser.displayName,
-      timestamp: new Date(),
-      video: currentVideoFilename
+      timestamp: new Date()
     });
     input.value = '';
     loadComments();
@@ -81,40 +92,11 @@ sendBtn.addEventListener('click', async () => {
 // コメント一覧取得
 async function loadComments() {
   list.innerHTML = '';
-  if (!currentVideoFilename) return;
-  console.log('currentVideoFilename:', currentVideoFilename); // 追加
-  const snapshot = await db.collection('comments')
-    .where('video', '==', currentVideoFilename)
-    .orderBy('timestamp', 'desc').get();
-  console.log('comments count:', snapshot.size); // 追加
+  const snapshot = await db.collection('comments').orderBy('timestamp', 'desc').get();
   snapshot.forEach(doc => {
     const data = doc.data();
-    console.log('comment data:', data); // 追加
     const li = document.createElement('li');
-    // mm:ss形式のタイムスタンプ検出＆リンク化
-    const match = data.text.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
-    if (match) {
-  const timeStr = match[1];
-  const commentText = match[2];
-  const [min, sec] = timeStr.split(':').map(Number);
-  const seconds = min * 60 + sec;
-  const timeLink = document.createElement('a');
-  timeLink.href = '#';
-  timeLink.textContent = timeStr;
-  timeLink.style.color = '#2196f3';
-  timeLink.style.textDecoration = 'underline';
-  timeLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    videoPlayer.currentTime = seconds;
-    videoPlayer.play();
-  });
-  // 表示形式：ユーザー名: タイムスタンプ コメント
-  li.appendChild(document.createTextNode(`${data.user || '匿名'}: `));
-  li.appendChild(timeLink);
-  li.appendChild(document.createTextNode(' ' + (commentText || '')));
-} else {
-  li.textContent = `${data.user || '匿名'}: ${data.text}`;
-}
+    li.textContent = `${data.user || '匿名'}: ${data.text}`;
     list.appendChild(li);
   });
 }
@@ -155,8 +137,10 @@ videoInput.addEventListener('change', async (e) => {
 });
 
 // 動画一覧表示
-// ダウンロードした動画一覧ul要素を取得
-const videoList = document.getElementById('downloadedVideoList');
+const videoListDiv = document.createElement('div');
+videoListDiv.innerHTML = '<h2>アップロード済み動画一覧</h2><ul id="videoList"></ul>';
+document.body.insertBefore(videoListDiv, videoInput.parentNode.nextSibling);
+const videoList = document.getElementById('videoList');
 
 async function loadVideoList() {
   videoList.innerHTML = '';
@@ -164,20 +148,7 @@ async function loadVideoList() {
   snapshot.forEach(doc => {
     const data = doc.data();
     const li = document.createElement('li');
-    // 日時表示（Firestoreのtimestamp型をDateに変換）
-    let dateStr = '';
-    if (data.timestamp) {
-      let d;
-      if (typeof data.timestamp === 'object' && typeof data.timestamp.toDate === 'function') {
-        d = data.timestamp.toDate();
-      } else if (typeof data.timestamp === 'string' || typeof data.timestamp === 'number') {
-        d = new Date(data.timestamp);
-      }
-      if (d) {
-        dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-      }
-    }
-    li.innerHTML = `<b>${data.user}</b>: <a href="#" data-url="${data.url}">${data.filename}</a> <span style="color:#888;font-size:0.95em;margin-left:8px;">${dateStr}</span>`;
+    li.innerHTML = `<b>${data.user}</b>: <a href="#" data-url="${data.url}">${data.filename}</a>`;
     li.querySelector('a').addEventListener('click', (e) => {
       e.preventDefault();
       videoPlayer.src = data.url;
@@ -185,8 +156,6 @@ async function loadVideoList() {
       playBtn.style.display = '';
       pauseBtn.style.display = '';
       videoPlayer.play();
-      currentVideoFilename = data.filename;
-      loadComments();
     });
     videoList.appendChild(li);
   });
@@ -237,13 +206,6 @@ pauseBtn.addEventListener('click', () => {
   videoPlayer.pause();
 });
 
-function estimatePoseLoop() {
-  // ここに骨格推定処理を記述
-  // 例: poseCanvasに推定結果を描画するなど
-  // 実装例がなければ何もせず return でもOK
-  return;
-}
-
 videoPlayer.addEventListener('loadeddata', () => {
   // 動画の実サイズでcanvasを設定
   poseCanvas.width = videoPlayer.videoWidth || 480;
@@ -251,14 +213,12 @@ videoPlayer.addEventListener('loadeddata', () => {
 });
 
 videoPlayer.addEventListener('play', () => {
-poseEstimateActive = true;
-estimatePoseLoop();
+  poseEstimateActive = true;
+  estimatePoseLoop();
 });
-
 videoPlayer.addEventListener('pause', () => {
   poseEstimateActive = false;
 });
 videoPlayer.addEventListener('ended', () => {
   poseEstimateActive = false;
 });
-
