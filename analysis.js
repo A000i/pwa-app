@@ -30,9 +30,44 @@ function getVideoFromParams() {
   return urlParams.get("video");
 }
 
+// BlobをDataURLに変換するヘルパー関数
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      resolve(e.target.result);
+    };
+    reader.onerror = function(error) {
+      reject(error);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 // 戻るボタン
 function goBack() {
   window.history.back();
+}
+
+// 動画エラー表示用関数
+function showVideoError(message) {
+  const originalPlaceholder = document.getElementById("originalPlaceholder");
+  const originalVideo = document.getElementById("originalVideo");
+  
+  if (originalVideo) {
+    originalVideo.style.display = "none";
+  }
+  
+  if (originalPlaceholder) {
+    originalPlaceholder.style.display = "flex";
+    originalPlaceholder.innerHTML = `
+      <div style="text-align: center; color: #ff0000; padding: 20px;">
+        <h3>❌ 動画読み込みエラー</h3>
+        <p>${message}</p>
+        <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #2E318F; color: white; border: none; border-radius: 4px; cursor: pointer;">再読み込み</button>
+      </div>
+    `;
+  }
 }
 
 // テスト表示機能
@@ -41,42 +76,90 @@ async function showTestResult() {
 
   try {
     const videoFileName = getVideoFromParams();
-    const videoData = localStorage.getItem(`video_${videoFileName}`);
+    let videoData = localStorage.getItem(`video_${videoFileName}`);
 
     console.log("テスト - 動画ファイル名:", videoFileName);
     console.log("テスト - 動画データ:", videoData ? "存在" : "なし");
 
-    if (videoData && !videoData.startsWith("blob:")) {
+    if (!videoData) {
+      showVideoError("動画データが見つかりません。メインページで動画を再選択してください。");
+      return;
+    }
+
+    // データ形式の詳細チェック
+    console.log("動画データの形式チェック:", {
+      isDataURL: videoData.startsWith("data:"),
+      isHTTPS: videoData.startsWith("https://"),
+      isFirebaseURL: videoData.includes("firebasestorage.googleapis.com"),
+      isVideo: videoData.startsWith("data:video/"),
+      isImage: videoData.startsWith("data:image/"),
+      length: videoData.length,
+      preview: videoData.substring(0, 100)
+    });
+    
+    // 画像データの場合の警告とクリア
+    if (videoData.startsWith("data:image/")) {
+      console.error("❌ 画像データが保存されています。動画分析には適していません。");
+      
+      // 古い画像データをクリア
+      localStorage.removeItem(`video_${videoFileName}`);
+      console.log("古い画像データをLocalStorageから削除しました");
+      
+      showVideoError(`
+        <div style="color: #ff0000;">
+          <h4>❌ 画像データが検出されました</h4>
+          <p>動画として保存されるべきデータが画像形式で保存されています。</p>
+          <p><strong>解決方法：</strong></p>
+          <ol style="text-align: left; margin: 10px 0;">
+            <li>メインページに戻る</li>
+            <li>動画を再度選択する</li>
+            <li>「骨格推定解析」ボタンをクリックする</li>
+          </ol>
+          <p style="font-size: 0.9em; color: #666;">
+            （古いデータは自動的にクリアされました）
+          </p>
+        </div>
+      `);
+      return;
+    }
+
+    // Firebase Storage URLの場合の処理
+    if (videoData && videoData.startsWith("https://firebasestorage.googleapis.com")) {
+      console.log("✅ Firebase Storage URLを検出、直接処理を試行");
+      try {
+        // Firebase Storage経由でBlobデータを取得を試行
+        if (typeof firebase !== 'undefined' && firebase.storage) {
+          console.log("Firebase経由でのBlob取得を試行中...");
+          const storageRef = firebase.storage().refFromURL(videoData);
+          const blob = await storageRef.getBlob();
+          const dataUrl = await blobToDataURL(blob);
+          
+          // 取得したデータが動画か確認
+          if (dataUrl.startsWith("data:video/")) {
+            videoData = dataUrl;
+            localStorage.setItem(`video_${videoFileName}`, dataUrl);
+            console.log("✅ Firebase Storage経由でデータ取得成功（動画形式確認済み）");
+          } else {
+            console.warn("Firebase Storage経由で取得したデータが動画形式ではありません");
+            // URLを直接使用
+          }
+        } else {
+          console.log("Firebase Storage未初期化、URL直接使用");
+        }
+      } catch (firebaseError) {
+        console.warn("Firebase Storage経由失敗、URL直接使用:", firebaseError);
+      }
+    }
+
+    if (videoData) {
       // 元動画を設定
       setupOriginalVideo(videoData);
 
       // リアルタイム骨格推定を開始
       await initializeRealtimePoseEstimation(videoData);
     } else {
-      // テスト用の表示
-      const canvas = document.getElementById("skeletonCanvas");
-      const skeletonPlaceholder = document.getElementById(
-        "skeletonPlaceholder"
-      );
-
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#e0e0e0";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#666";
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(
-          "動画データが無効です",
-          canvas.width / 2,
-          canvas.height / 2
-        );
-        canvas.style.display = "block";
-      }
-
-      if (skeletonPlaceholder) {
-        skeletonPlaceholder.style.display = "none";
-      }
+      showVideoError("有効な動画データが見つかりません。");
+      return;
     }
 
     // 評価結果の表示
@@ -87,7 +170,7 @@ async function showTestResult() {
     document.getElementById("resultSection").style.display = "block";
   } catch (error) {
     console.error("テスト表示エラー:", error);
-    alert("テスト表示でエラーが発生しました: " + error.message);
+    showVideoError(`エラーが発生しました: ${error.message}`);
   }
 }
 
@@ -117,7 +200,33 @@ function setupOriginalVideo(videoData) {
     };
 
     originalVideo.onerror = (error) => {
-      console.error("元動画読み込みエラー:", error);
+      console.error("元動画読み込みエラー - 詳細:", error);
+      console.error("動画src:", originalVideo.src);
+      console.error("エラーコード:", originalVideo.error ? originalVideo.error.code : "不明");
+      console.error("エラーメッセージ:", originalVideo.error ? originalVideo.error.message : "不明");
+      
+      // エラーの種類を特定
+      if (originalVideo.error) {
+        switch(originalVideo.error.code) {
+          case 1:
+            console.error("MEDIA_ERR_ABORTED: ユーザーによる再生中止");
+            break;
+          case 2:
+            console.error("MEDIA_ERR_NETWORK: ネットワークエラー");
+            break;
+          case 3:
+            console.error("MEDIA_ERR_DECODE: デコードエラー（対応していない形式）");
+            break;
+          case 4:
+            console.error("MEDIA_ERR_SRC_NOT_SUPPORTED: ソース形式がサポートされていない");
+            break;
+          default:
+            console.error("不明なエラー");
+        }
+      }
+      
+      // ユーザーに分かりやすいエラー表示
+      showVideoError("動画の読み込みに失敗しました。動画形式またはURLを確認してください。");
     };
 
     // 同期イベントを追加
@@ -645,32 +754,66 @@ function showDebugInfo() {
   const videoFileName = getVideoFromParams();
   const videoData = localStorage.getItem(`video_${videoFileName}`);
 
+  // LocalStorageの全video_データをチェック
+  const allVideoData = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('video_')) {
+      const value = localStorage.getItem(key);
+      allVideoData.push({
+        key: key,
+        type: value.startsWith('data:image/') ? '画像データ（問題）' :
+              value.startsWith('data:video/') ? '動画データ（正常）' :
+              value.startsWith('https://') ? 'URL（正常）' : '不明',
+        length: value.length,
+        preview: value.substring(0, 50) + '...'
+      });
+    }
+  }
+
   let debugHTML = `
     <div style="text-align: left; padding: 20px; background: #f8f9fa; border-radius: 8px;">
       <h3>デバッグ情報</h3>
       <p><strong>現在のURL:</strong> ${window.location.href}</p>
       <p><strong>動画ファイル名:</strong> ${videoFileName || "取得失敗"}</p>
-      <p><strong>動画データ:</strong> ${
+      <p><strong>現在の動画データ:</strong> ${
         videoData ? "存在 (長さ: " + videoData.length + ")" : "なし"
       }</p>
       <p><strong>動画データタイプ:</strong> ${
         videoData
-          ? videoData.startsWith("blob:")
-            ? "BlobURL（無効）"
-            : videoData.startsWith("http")
-            ? "HTTP URL"
-            : "その他"
+          ? videoData.startsWith("data:image/")
+            ? "❌ 画像データ（問題あり）"
+            : videoData.startsWith("data:video/")
+            ? "✅ 動画データ（正常）"
+            : videoData.startsWith("https://")
+            ? "✅ URL（正常）"
+            : "❓ 不明"
           : "なし"
       }</p>
       <p><strong>TensorFlow.js:</strong> ${
-        typeof tf !== "undefined" ? "読み込み済み" : "未読み込み"
+        typeof tf !== "undefined" ? "✅ 読み込み済み" : "❌ 未読み込み"
       }</p>
       <p><strong>PoseDetection:</strong> ${
-        typeof poseDetection !== "undefined" ? "読み込み済み" : "未読み込み"
+        typeof poseDetection !== "undefined" ? "✅ 読み込み済み" : "❌ 未読み込み"
       }</p>
+      
+      <h4>LocalStorage内の全動画データ</h4>
+      <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">
+        ${allVideoData.length > 0 ? 
+          allVideoData.map(item => 
+            `<div style="margin-bottom: 8px; padding: 8px; background: ${item.type.includes('問題') ? '#ffe6e6' : '#e6f7e6'}; border-radius: 4px;">
+              <strong>${item.key}:</strong> ${item.type}<br>
+              <small>長さ: ${item.length} / プレビュー: ${item.preview}</small>
+            </div>`
+          ).join('') 
+          : '<p>動画データなし</p>'
+        }
+      </div>
+      
       <div style="margin-top: 15px;">
         <button onclick="location.reload()" style="padding: 8px 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; margin-right: 10px; cursor: pointer;">再読み込み</button>
         <button onclick="showTestResult()" style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; margin-right: 10px; cursor: pointer;">テスト表示</button>
+        <button onclick="localStorage.clear(); alert('LocalStorageをクリアしました'); location.reload();" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; margin-right: 10px; cursor: pointer;">データクリア</button>
         <button onclick="goBack()" style="padding: 8px 16px; background: #2E318F; color: white; border: none; border-radius: 4px; cursor: pointer;">戻る</button>
       </div>
     </div>
