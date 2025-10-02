@@ -5,8 +5,14 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>動画解析結果</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    
+    <!-- TensorFlow.jsとPose Detection - より安定したバージョンを使用 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js" crossorigin="anonymous"></script>
+    
+    <!-- Firebase SDK追加（ストレージアクセス用） -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
     <style>
       body {
         font-family: "Segoe UI", "Meiryo", sans-serif;
@@ -299,6 +305,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Firebase設定 -->
+    <script>
+      // Firebase設定（main.jsと同じ設定）
+      const firebaseConfig = {
+        apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
+        authDomain: "basketball-ansys.firebaseapp.com",
+        projectId: "basketball-ansys",
+        storageBucket: "basketball-ansys.firebasestorage.app",
+        messagingSenderId: "940330605654",
+        appId: "1:940330605654:web:30b7443ba196cef5b72ff7",
+      };
+
+      // Firebase初期化（既に初期化されていない場合のみ）
+      if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+        window.firebaseStorage = firebase.storage();
+        console.log("Firebase Storage initialized for analysis page");
+      }
+    </script>
 
     <script src="analysis.js"></script>
   </body>
