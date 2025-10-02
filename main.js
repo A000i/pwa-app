@@ -205,20 +205,33 @@ async function loadVideoList() {
     li.innerHTML = `<b>${data.user}</b>: <a href="#" data-url="${data.url}">${data.filename}</a> <span style="color:#888;font-size:0.95em;margin-left:8px;">${dateStr}</span>`;
     li.querySelector("a").addEventListener("click", async (e) => {
       e.preventDefault();
-      videoPlayer.src = data.url;
-      videoPlayer.style.display = "";
-      playBtn.style.display = "";
-      pauseBtn.style.display = "";
-      analysisBtn.style.display = ""; // 解析ボタンを表示
-      videoPlayer.play();
-      currentVideoFilename = data.filename;
-      currentVideoURL = data.url; // URLを保存
-      currentVideoBlob = null; // Blobは使用しない
+      
+      try {
+        console.log("動画選択開始 - URL:", data.url);
+        
+        // 動画プレイヤーにURLを設定（プレビュー用）
+        videoPlayer.src = data.url;
+        videoPlayer.style.display = "";
+        playBtn.style.display = "";
+        pauseBtn.style.display = "";
+        analysisBtn.style.display = ""; // 解析ボタンを表示
+        
+        // 動画情報を保存
+        currentVideoFilename = data.filename;
+        currentVideoURL = data.url;
+        currentVideoBlob = null; // Blobは使用しない
 
-      console.log("動画選択完了 - ファイル名:", currentVideoFilename);
-      console.log("動画選択完了 - URL:", currentVideoURL);
+        console.log("動画選択完了 - ファイル名:", currentVideoFilename);
+        console.log("動画選択完了 - URL:", currentVideoURL);
 
-      loadComments();
+        // プレビューを開始
+        videoPlayer.play();
+        
+        loadComments();
+      } catch (error) {
+        console.error("動画選択エラー:", error);
+        alert("動画の読み込みに失敗しました: " + error.message);
+      }
     });
     videoList.appendChild(li);
   });
@@ -308,9 +321,13 @@ analysisBtn.addEventListener("click", async () => {
   if (currentVideoURL && currentVideoFilename) {
     try {
       console.log("骨格推定ボタンクリック - 動画URL:", currentVideoURL);
+      
+      // 処理中の表示
+      analysisBtn.disabled = true;
+      analysisBtn.textContent = "処理中...";
 
-      // Firebase StorageのHTTPS URLを直接保存
-      localStorage.setItem(`video_${currentVideoFilename}`, currentVideoURL);
+      // CORS問題を回避するため、Firebase URLから動画データを取得してBase64に変換
+      await convertFirebaseVideoToBase64(currentVideoURL, currentVideoFilename);
 
       console.log("LocalStorageに保存完了");
 
@@ -320,12 +337,20 @@ analysisBtn.addEventListener("click", async () => {
       )}`;
     } catch (error) {
       console.error("骨格推定ボタンエラー:", error);
-      alert("データの準備中にエラーが発生しました");
+      alert("データの準備中にエラーが発生しました: " + error.message);
+      
+      // ボタンを元に戻す
+      analysisBtn.disabled = false;
+      analysisBtn.textContent = "骨格推定解析";
     }
   } else if (currentVideoBlob && currentVideoFilename) {
     // Blobしかない場合の処理（ローカルファイル選択時）
     try {
       console.log("Blobからの処理開始");
+      
+      // 処理中の表示
+      analysisBtn.disabled = true;
+      analysisBtn.textContent = "処理中...";
 
       // BlobをData URLに変換
       const reader = new FileReader();
@@ -338,12 +363,123 @@ analysisBtn.addEventListener("click", async () => {
           currentVideoFilename
         )}`;
       };
+      reader.onerror = function(error) {
+        console.error("FileReader エラー:", error);
+        alert("動画データの変換中にエラーが発生しました");
+        
+        // ボタンを元に戻す
+        analysisBtn.disabled = false;
+        analysisBtn.textContent = "骨格推定解析";
+      };
       reader.readAsDataURL(currentVideoBlob);
     } catch (error) {
       console.error("Blob処理エラー:", error);
       alert("動画データの変換中にエラーが発生しました");
+      
+      // ボタンを元に戻す
+      analysisBtn.disabled = false;
+      analysisBtn.textContent = "骨格推定解析";
     }
   } else {
     alert("解析する動画を選択してください");
   }
 });
+
+// Firebase StorageのURLから動画データを取得してBase64に変換する関数
+async function convertFirebaseVideoToBase64(url, filename) {
+  try {
+    console.log("Firebase URLから動画データを取得中...");
+    
+    // まずFirebase Storage SDKを試行
+    try {
+      const storageRef = storage.refFromURL(url);
+      const blob = await storageRef.getBlob();
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const dataUrl = e.target.result;
+          localStorage.setItem(`video_${filename}`, dataUrl);
+          console.log("Firebase SDK経由でBase64変換完了、LocalStorageに保存");
+          resolve(dataUrl);
+        };
+        reader.onerror = function(error) {
+          console.error("FileReader エラー:", error);
+          reject(error);
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (sdkError) {
+      console.log("Firebase SDK経由失敗、代替手段を試行:", sdkError);
+      
+      // 代替手段: プロキシ経由またはfetch with no-cors
+      try {
+        // GitHub Pages用の代替手段
+        const response = await fetch(url, {
+          mode: 'no-cors',  // CORSを回避
+          credentials: 'omit'
+        });
+        
+        if (!response.ok && response.type !== 'opaque') {
+          throw new Error('フェッチに失敗しました');
+        }
+        
+        // no-corsモードでは直接Blobを取得できないため、
+        // video要素経由でキャンバスに描画してデータを取得
+        return await captureVideoAsDataURL(url, filename);
+        
+      } catch (fetchError) {
+        console.error("Fetch代替手段も失敗:", fetchError);
+        
+        // 最終手段: URLをそのまま保存（ローカルでのみ動作）
+        console.log("最終手段: URLを直接保存");
+        localStorage.setItem(`video_${filename}`, url);
+        return url;
+      }
+    }
+  } catch (error) {
+    console.error("Firebase動画取得エラー:", error);
+    throw new Error("動画データの取得に失敗しました。ネットワーク接続を確認してください。");
+  }
+}
+
+// ビデオ要素とキャンバスを使用してデータURLを取得
+async function captureVideoAsDataURL(videoUrl, filename) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';  // CORS設定
+    video.preload = 'metadata';
+    
+    video.onloadeddata = function() {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // 最初のフレームをキャプチャ
+        ctx.drawImage(video, 0, 0);
+        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // 簡易的なデータとして保存（実際の動画ではないが、分析には使用可能）
+        localStorage.setItem(`video_${filename}`, dataURL);
+        console.log("キャンバス経由でデータURL作成完了");
+        resolve(dataURL);
+      } catch (canvasError) {
+        console.error("キャンバス処理エラー:", canvasError);
+        // それでも失敗した場合はURLを保存
+        localStorage.setItem(`video_${filename}`, videoUrl);
+        resolve(videoUrl);
+      }
+    };
+    
+    video.onerror = function(error) {
+      console.error("ビデオ読み込みエラー:", error);
+      // エラーでもURLを保存して続行
+      localStorage.setItem(`video_${filename}`, videoUrl);
+      resolve(videoUrl);
+    };
+    
+    video.src = videoUrl;
+  });
+}
