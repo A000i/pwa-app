@@ -4,10 +4,31 @@ let analysisData = null;
 
 // ページ読み込み時の初期化
 document.addEventListener("DOMContentLoaded", () => {
-  loadAnalysisData();
-  generateDetailedAnalysis();
-  drawScoreChart();
+  try {
+    loadAnalysisData();
+    generateDetailedAnalysis();
+    drawScoreChart();
+  } catch (error) {
+    console.error("初期化エラー:", error);
+    showError("初期化エラー", error.message);
+  }
 });
+
+// エラー表示用関数
+function showError(title, message) {
+  const container = document.querySelector('.container');
+  if (container) {
+    container.innerHTML = `
+      <div style="text-align: center; color: red; padding: 20px;">
+        <h3>${title}</h3>
+        <p>${message}</p>
+        <div style="margin-top: 20px;">
+          <button onclick="goBack()" style="padding: 10px 20px; background: #2E318F; color: white; border: none; border-radius: 5px; cursor: pointer;">戻る</button>
+        </div>
+      </div>
+    `;
+  }
+}
 
 // 分析データの読み込み
 function loadAnalysisData() {
@@ -75,13 +96,13 @@ function generateBasicPostureAnalysis() {
 
     let html =
       "<p style='color: orange; margin-bottom: 15px;'>⚠️ 分析データが見つかりません。分析ページから再度アクセスしてください。</p>";
-    sampleEvaluations.forEach((eval) => {
+    sampleEvaluations.forEach((evaluation) => {
       html += `
         <div class="evaluation-item">
-          <div class="part-name">${eval.part}</div>
+          <div class="part-name">${evaluation.part}</div>
           <div class="score-info">
-            <div class="score-value ${eval.class}">${eval.score}/5 ${eval.rating}</div>
-            <div class="score-detail">${eval.detail}</div>
+            <div class="score-value ${evaluation.class}">${evaluation.score}/5 ${evaluation.rating}</div>
+            <div class="score-detail">${evaluation.detail}</div>
           </div>
         </div>
       `;
@@ -93,13 +114,13 @@ function generateBasicPostureAnalysis() {
   const evaluations = analyzeBasicPosture(analysisData.pose.keypoints);
 
   let html = "";
-  evaluations.forEach((eval) => {
+  evaluations.forEach((evaluation) => {
     html += `
       <div class="evaluation-item">
-        <div class="part-name">${eval.part}</div>
+        <div class="part-name">${evaluation.part}</div>
         <div class="score-info">
-          <div class="score-value ${eval.class}">${eval.score}/5 ${eval.rating}</div>
-          <div class="score-detail">${eval.detail}</div>
+          <div class="score-value ${evaluation.class}">${evaluation.score}/5 ${evaluation.rating}</div>
+          <div class="score-detail">${evaluation.detail}</div>
         </div>
       </div>
     `;
@@ -148,13 +169,13 @@ function generateActionAnalysis() {
 
     let html =
       "<p style='color: orange; margin-bottom: 15px;'>⚠️ 分析データが見つかりません。分析ページから再度アクセスしてください。</p>";
-    sampleActionEvaluations.forEach((eval) => {
+    sampleActionEvaluations.forEach((evaluation) => {
       html += `
         <div class="evaluation-item">
-          <div class="part-name">${eval.part}</div>
+          <div class="part-name">${evaluation.part}</div>
           <div class="score-info">
-            <div class="score-value ${eval.class}">${eval.score}/5 ${eval.rating}</div>
-            <div class="score-detail">${eval.detail}</div>
+            <div class="score-value ${evaluation.class}">${evaluation.score}/5 ${evaluation.rating}</div>
+            <div class="score-detail">${evaluation.detail}</div>
           </div>
         </div>
       `;
@@ -166,13 +187,13 @@ function generateActionAnalysis() {
   const actionEvaluations = analyzeActionSpecific(analysisData.pose.keypoints);
 
   let html = "";
-  actionEvaluations.forEach((eval) => {
+  actionEvaluations.forEach((evaluation) => {
     html += `
       <div class="evaluation-item">
-        <div class="part-name">${eval.part}</div>
+        <div class="part-name">${evaluation.part}</div>
         <div class="score-info">
-          <div class="score-value ${eval.class}">${eval.score}/5 ${eval.rating}</div>
-          <div class="score-detail">${eval.detail}</div>
+          <div class="score-value ${evaluation.class}">${evaluation.score}/5 ${evaluation.rating}</div>
+          <div class="score-detail">${evaluation.detail}</div>
         </div>
       </div>
     `;
@@ -231,14 +252,18 @@ function analyzeActionSpecific(keypoints) {
 // シュートフォーム分析
 function analyzeShootingForm(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const rightShoulder = keypoints[6];
     const rightElbow = keypoints[8];
     const rightWrist = keypoints[10];
 
     if (
-      rightShoulder.score > 0.5 &&
-      rightElbow.score > 0.5 &&
-      rightWrist.score > 0.5
+      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
+      rightElbow && rightElbow.score && rightElbow.score > 0.5 &&
+      rightWrist && rightWrist.score && rightWrist.score > 0.5
     ) {
       const elbowAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
 
@@ -282,16 +307,20 @@ function analyzeShootingForm(keypoints) {
 // ディフェンススタンス分析
 function analyzeDefenseStance(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
     const leftKnee = keypoints[13];
     const rightKnee = keypoints[14];
 
     if (
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5 &&
-      leftKnee.score > 0.5 &&
-      rightKnee.score > 0.5
+      leftHip && leftHip.score && leftHip.score > 0.5 &&
+      rightHip && rightHip.score && rightHip.score > 0.5 &&
+      leftKnee && leftKnee.score && leftKnee.score > 0.5 &&
+      rightKnee && rightKnee.score && rightKnee.score > 0.5
     ) {
       const hipCenter = { y: (leftHip.y + rightHip.y) / 2 };
       const kneeCenter = { y: (leftKnee.y + rightKnee.y) / 2 };
@@ -337,11 +366,17 @@ function analyzeDefenseStance(keypoints) {
 // ドリブル姿勢分析
 function analyzeDribblePosture(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const nose = keypoints[0];
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
-    if (nose.score > 0.5 && leftHip.score > 0.5 && rightHip.score > 0.5) {
+    if (nose && nose.score && nose.score > 0.5 && 
+        leftHip && leftHip.score && leftHip.score > 0.5 && 
+        rightHip && rightHip.score && rightHip.score > 0.5) {
       const hipCenter = {
         x: (leftHip.x + rightHip.x) / 2,
         y: (leftHip.y + rightHip.y) / 2,
@@ -390,16 +425,20 @@ function analyzeDribblePosture(keypoints) {
 // 重心安定性分析
 function analyzeStability(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const leftAnkle = keypoints[15];
     const rightAnkle = keypoints[16];
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
     if (
-      leftAnkle.score > 0.5 &&
-      rightAnkle.score > 0.5 &&
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5
+      leftAnkle && leftAnkle.score && leftAnkle.score > 0.5 &&
+      rightAnkle && rightAnkle.score && rightAnkle.score > 0.5 &&
+      leftHip && leftHip.score && leftHip.score > 0.5 &&
+      rightHip && rightHip.score && rightHip.score > 0.5
     ) {
       const ankleCenter = { x: (leftAnkle.x + rightAnkle.x) / 2 };
       const hipCenter = { x: (leftHip.x + rightHip.x) / 2 };
@@ -468,9 +507,9 @@ function generateRecommendations() {
   const allEvaluations = [...evaluations, ...actionEvaluations];
   const recommendations = [];
 
-  allEvaluations.forEach((eval) => {
-    if (eval.score <= 3) {
-      recommendations.push(getRecommendation(eval.part, eval.score));
+  allEvaluations.forEach((evaluation) => {
+    if (evaluation.score <= 3) {
+      recommendations.push(getRecommendation(evaluation.part, evaluation.score));
     }
   });
 
@@ -569,14 +608,14 @@ function drawScoreChart() {
   const barWidth = totalBarWidth / totalBars;
   const barSpacing = totalSpacing / (totalBars + 1);
 
-  allEvaluations.forEach((eval, index) => {
+  allEvaluations.forEach((evaluation, index) => {
     const x =
       chartArea.left + barSpacing + index * (barWidth + barSpacing / totalBars);
-    const height = (eval.score / 5) * chartHeight;
+    const height = (evaluation.score / 5) * chartHeight;
     const y = chartArea.bottom - height;
 
     // バーの描画
-    ctx.fillStyle = getColorForClass(eval.class);
+    ctx.fillStyle = getColorForClass(evaluation.class);
     ctx.fillRect(x, y, barWidth, height);
 
     // バーの枠線
@@ -588,7 +627,7 @@ function drawScoreChart() {
     ctx.fillStyle = "#333";
     ctx.font = "bold 14px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(eval.score.toString(), x + barWidth / 2, y - 8);
+    ctx.fillText(evaluation.score.toString(), x + barWidth / 2, y - 8);
 
     // ラベルをすべて縦書きで統一
     ctx.fillStyle = "#333";
@@ -599,8 +638,8 @@ function drawScoreChart() {
     let startY = chartArea.bottom + 35; // 開始位置をさらに余裕を持って下に移動
 
     // すべてのラベルを縦書きで表示
-    for (let i = 0; i < eval.part.length; i++) {
-      ctx.fillText(eval.part[i], centerX, startY + i * 18); // 間隔を広げる
+    for (let i = 0; i < evaluation.part.length; i++) {
+      ctx.fillText(evaluation.part[i], centerX, startY + i * 18); // 間隔を広げる
     }
   });
 
@@ -666,14 +705,26 @@ function getColorForClass(className) {
 
 // 角度計算関数（analysis.jsから複製）
 function calculateAngle(point1, point2, point3) {
-  const radians =
-    Math.atan2(point3.y - point2.y, point3.x - point2.x) -
-    Math.atan2(point1.y - point2.y, point1.x - point2.x);
-  let angle = Math.abs((radians * 180.0) / Math.PI);
-  if (angle > 180.0) {
-    angle = 360.0 - angle;
+  try {
+    if (!point1 || !point2 || !point3 ||
+        point1.x === undefined || point1.y === undefined ||
+        point2.x === undefined || point2.y === undefined ||
+        point3.x === undefined || point3.y === undefined) {
+      throw new Error("無効なポイントデータです");
+    }
+
+    const radians =
+      Math.atan2(point3.y - point2.y, point3.x - point2.x) -
+      Math.atan2(point1.y - point2.y, point1.x - point2.x);
+    let angle = Math.abs((radians * 180.0) / Math.PI);
+    if (angle > 180.0) {
+      angle = 360.0 - angle;
+    }
+    return angle;
+  } catch (error) {
+    console.error("角度計算エラー:", error);
+    return 90; // デフォルト値
   }
-  return angle;
 }
 
 // 基本姿勢評価関数（analysis.jsから複製）
@@ -726,16 +777,20 @@ function analyzeBasicPosture(keypoints) {
 // 分析関数（analysis.jsから複製）
 function analyzeBalance(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const leftShoulder = keypoints[5];
     const rightShoulder = keypoints[6];
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
     if (
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5 &&
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5
+      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
+      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
+      leftHip && leftHip.score && leftHip.score > 0.5 &&
+      rightHip && rightHip.score && rightHip.score > 0.5
     ) {
       const shoulderCenter = (leftShoulder.x + rightShoulder.x) / 2;
       const hipCenter = (leftHip.x + rightHip.x) / 2;
@@ -780,11 +835,17 @@ function analyzeBalance(keypoints) {
 
 function analyzeKneeAngle(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const leftHip = keypoints[11];
     const leftKnee = keypoints[13];
     const leftAnkle = keypoints[15];
 
-    if (leftHip.score > 0.5 && leftKnee.score > 0.5 && leftAnkle.score > 0.5) {
+    if (leftHip && leftHip.score && leftHip.score > 0.5 && 
+        leftKnee && leftKnee.score && leftKnee.score > 0.5 && 
+        leftAnkle && leftAnkle.score && leftAnkle.score > 0.5) {
       const angle = calculateAngle(leftHip, leftKnee, leftAnkle);
 
       if (angle >= 140 && angle <= 160) {
@@ -826,6 +887,10 @@ function analyzeKneeAngle(keypoints) {
 
 function analyzeSpineAlignment(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const nose = keypoints[0];
     const leftShoulder = keypoints[5];
     const rightShoulder = keypoints[6];
@@ -833,11 +898,11 @@ function analyzeSpineAlignment(keypoints) {
     const rightHip = keypoints[12];
 
     if (
-      nose.score > 0.5 &&
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5 &&
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5
+      nose && nose.score && nose.score > 0.5 &&
+      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
+      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
+      leftHip && leftHip.score && leftHip.score > 0.5 &&
+      rightHip && rightHip.score && rightHip.score > 0.5
     ) {
       const shoulderCenter = {
         x: (leftShoulder.x + rightShoulder.x) / 2,
@@ -896,16 +961,20 @@ function analyzeSpineAlignment(keypoints) {
 
 function analyzeStanceWidth(keypoints) {
   try {
+    if (!keypoints || !Array.isArray(keypoints) || keypoints.length < 17) {
+      throw new Error("キーポイントデータが不正です");
+    }
+
     const leftAnkle = keypoints[15];
     const rightAnkle = keypoints[16];
     const leftShoulder = keypoints[5];
     const rightShoulder = keypoints[6];
 
     if (
-      leftAnkle.score > 0.5 &&
-      rightAnkle.score > 0.5 &&
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5
+      leftAnkle && leftAnkle.score && leftAnkle.score > 0.5 &&
+      rightAnkle && rightAnkle.score && rightAnkle.score > 0.5 &&
+      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
+      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5
     ) {
       const ankleWidth = Math.abs(leftAnkle.x - rightAnkle.x);
       const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
@@ -969,13 +1038,13 @@ function downloadReport() {
   ).toLocaleString()}\n\n`;
 
   reportText += `基本姿勢評価:\n`;
-  evaluations.forEach((eval) => {
-    reportText += `${eval.part}: ${eval.score}/5 ${eval.rating} (${eval.detail})\n`;
+  evaluations.forEach((evaluation) => {
+    reportText += `${evaluation.part}: ${evaluation.score}/5 ${evaluation.rating} (${evaluation.detail})\n`;
   });
 
   reportText += `\n動作別評価:\n`;
-  actionEvaluations.forEach((eval) => {
-    reportText += `${eval.part}: ${eval.score}/5 ${eval.rating} (${eval.detail})\n`;
+  actionEvaluations.forEach((evaluation) => {
+    reportText += `${evaluation.part}: ${evaluation.score}/5 ${evaluation.rating} (${evaluation.detail})\n`;
   });
 
   const blob = new Blob([reportText], { type: "text/plain" });
