@@ -423,4 +423,12 @@ analysisBtn.addEventListener("click", async () => {
   }
 });
 
-
+// ページロード時の初期化処理
+document.addEventListener("DOMContentLoaded", function() {
+  // 骨格推定解析ボタンの状態をリセット
+  const analysisBtn = document.getElementById("analysisBtn");
+  if (analysisBtn) {
+    analysisBtn.disabled = false;
+    analysisBtn.textContent = "骨格推定解析";
+  }
+});

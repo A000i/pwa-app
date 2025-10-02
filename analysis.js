@@ -46,7 +46,8 @@ function blobToDataURL(blob) {
 
 // 戻るボタン
 function goBack() {
-  window.history.back();
+  // メインページに直接遷移してページをリロード
+  window.location.href = 'index.html';
 }
 
 // 動画エラー表示用関数
