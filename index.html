@@ -1,9 +1,8 @@
-<!DOCTYPE html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>コメントテスト</title>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -12,35 +11,248 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-</head>
-<body>
-    <h1>コメントテスト</h1>
-    <div>
-        <input type="text" id="commentInput" placeholder="コメントを入力">
-        <button id="sendComment">送信</button>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      body {
+        font-family: "Segoe UI", "Meiryo", sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 0;
+      }
+      .main-layout {
+        display: flex;
+        flex-direction: row;
+        gap: 24px;
+        max-width: 1200px;
+        margin: 32px auto;
+        padding: 24px;
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      .column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .video-list-area {
+        flex: 1;
+      }
+      .video-list-area h2 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+      }
+      #downloadedVideoList {
+        list-style: none;
+        padding: 0;
+      }
+      #downloadedVideoList li {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .play-btn {
+        width: 48px;
+        height: 48px;
+        background: #2e318f;
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .video-title {
+        font-size: 1.1rem;
+      }
+      .player-area {
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .player-area h2 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+      }
+      #videoPlayer {
+        width: 100%;
+        max-width: 480px;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        margin-bottom: 16px;
+      }
+      #poseCanvas {
+        width: 100%;
+        max-width: 480px;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      }
+      .comment-area {
+        flex: 1;
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      }
+      .comment-area h2 {
+        font-size: 1.2rem;
+        margin-bottom: 12px;
+      }
+      #commentInput {
+        font-size: 1.1rem;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        width: 100%;
+        margin-bottom: 12px;
+      }
+      #sendComment {
+        font-size: 1.1rem;
+        padding: 10px 24px;
+        border-radius: 8px;
+        background: #2e318f;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        margin-bottom: 16px;
+      }
+      #sendComment:active {
+        background: #2e318f;
+      }
+      #commentList {
+        font-size: 1rem;
+        padding-left: 0;
+      }
+      #commentList li {
+        padding: 10px 8px;
+        border-bottom: 1px solid #eee;
+        list-style: none;
+        background: #fff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+      }
+      @media (max-width: 900px) {
+        .main-layout {
+          flex-direction: column;
+          gap: 16px;
+        }
+      }
+      #loginBtn {
+        background: #2e318f;
+        color: #fff;
+      }
+      #loginBtn:active {
+        background: #1e225c;
+      }
+      #analysisBtn:hover {
+        background: #1e225c !important;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- タイトル削除 -->
+    <div
+      id="loginArea"
+      style="
+        position: fixed;
+        top: 24px;
+        right: 32px;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 1.2rem;
+        background: #fff;
+        padding: 8px 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      "
+    >
+      <span id="loginInfo">未ログイン</span>
+      <button
+        id="loginBtn"
+        style="
+          font-size: 1.1rem;
+          padding: 8px 18px;
+          border-radius: 8px;
+          border: none;
+          cursor: pointer;
+        "
+      >
+        Googleでログイン
+      </button>
+      <button
+        id="logoutBtn"
+        style="
+          font-size: 1.1rem;
+          padding: 8px 18px;
+          border-radius: 8px;
+          background: #bbb;
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          display: none;
+        "
+      >
+        ログアウト
+      </button>
     </div>
-    <div>
+    <div class="main-layout">
+      <div class="column video-list-area">
+        <h2>ダウンロードした動画一覧</h2>
+        <ul id="downloadedVideoList"></ul>
+      </div>
+      <div class="column player-area">
+        <h2>再生動画</h2>
+        <label for="videoInput">動画ファイルを選択：</label>
+        <input type="file" id="videoInput" accept="video/*" />
+        <button
+          id="analysisBtn"
+          style="
+            display: none;
+            margin: 16px 0;
+            padding: 12px 24px;
+            background: #2e318f;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+          "
+        >
+          骨格推定解析
+        </button>
+        <div>
+          <button id="playBtn" style="display: none">再生</button>
+          <button id="pauseBtn" style="display: none">停止</button>
+        </div>
+        <video
+          id="videoPlayer"
+          width="480"
+          controls
+          style="display: none"
+        ></video>
+        <canvas
+          id="poseCanvas"
+          width="480"
+          height="360"
+          style="border: 1px solid #ccc; display: none"
+        ></canvas>
+        <div id="poseLoading" style="display: none">骨格推定中...</div>
+      </div>
+      <div class="column comment-area">
+        <h2>コメント入力</h2>
+        <input type="text" id="commentInput" placeholder="コメント" />
+        <button id="sendComment">送信</button>
         <h2>コメント一覧</h2>
         <ul id="commentList"></ul>
-    </div>
-    <div>
-        <label for="videoInput">動画ファイルを選択：</label>
-        <input type="file" id="videoInput" accept="video/*">
-    </div>
-    <div style="display: flex; gap: 20px; align-items: flex-start;">
-        <div>
-            <div>
-                <button id="playBtn" style="display:none;">再生</button>
-                <button id="pauseBtn" style="display:none;">停止</button>
-            </div>
-            <video id="videoPlayer" width="480" controls style="display:none;"></video>
-        </div>
-        <div>
-            <div style="height:38px;"></div>
-            <canvas id="poseCanvas" width="480" height="360" style="border:1px solid #ccc; display:none;"></canvas>
-            <div id="poseLoading" style="display:none;">骨格推定中...</div>
-        </div>
+      </div>
     </div>
     <script src="main.js"></script>
-</body>
+  </body>
 </html>
