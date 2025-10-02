@@ -161,13 +161,18 @@ async function initializeRealtimePoseEstimation(videoData) {
     // PoseDetectionモデルのロード
     if (!poseModel) {
       console.log("PoseDetectionモデル読み込み開始");
-      poseModel = await poseDetection.createDetector(
-        poseDetection.SupportedModels.MoveNet,
-        {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING, // リアルタイム用に高速モデル
-        }
-      );
-      console.log("PoseDetectionモデル読み込み完了");
+      try {
+        poseModel = await poseDetection.createDetector(
+          poseDetection.SupportedModels.MoveNet,
+          {
+            modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING, // リアルタイム用に高速モデル
+          }
+        );
+        console.log("PoseDetectionモデル読み込み完了");
+      } catch (modelError) {
+        console.error("モデル読み込みエラー:", modelError);
+        throw new Error(`PoseDetectionモデルの読み込みに失敗しました: ${modelError.message}`);
+      }
     }
 
     // 元動画のサイズを取得してキャンバスサイズを設定
@@ -275,7 +280,10 @@ async function poseEstimationLoop() {
 
 // 単一フレームの骨格推定
 async function performSingleFramePoseEstimation() {
-  if (!poseModel || !originalVideo || !skeletonCtx) return;
+  if (!poseModel || !originalVideo || !skeletonCtx) {
+    console.warn("骨格推定の必要な要素が不足しています");
+    return;
+  }
 
   try {
     // 動画フレームをキャンバスに描画
@@ -291,7 +299,7 @@ async function performSingleFramePoseEstimation() {
     // 骨格推定実行（キャンバスから推定）
     const poses = await poseModel.estimatePoses(skeletonCanvas);
 
-    if (poses.length > 0) {
+    if (poses && poses.length > 0) {
       // 現在のポーズデータを保存（評価で使用）
       window.currentPose = poses[0];
 
@@ -305,9 +313,25 @@ async function performSingleFramePoseEstimation() {
 
       // 評価を更新
       generateEvaluation();
+    } else {
+      console.log("ポーズが検出されませんでした");
     }
   } catch (error) {
     console.error("単一フレーム骨格推定エラー:", error);
+    
+    // エラー時にメッセージを表示
+    if (skeletonCtx) {
+      skeletonCtx.fillStyle = "rgba(255, 0, 0, 0.1)";
+      skeletonCtx.fillRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+      skeletonCtx.fillStyle = "#ff0000";
+      skeletonCtx.font = "14px Arial";
+      skeletonCtx.textAlign = "center";
+      skeletonCtx.fillText(
+        "骨格推定エラー",
+        skeletonCanvas.width / 2,
+        skeletonCanvas.height / 2
+      );
+    }
   }
 }
 
@@ -344,13 +368,18 @@ async function performPoseEstimation(videoData) {
     // PoseDetectionモデルのロード
     if (!poseModel) {
       console.log("PoseDetectionモデル読み込み開始");
-      poseModel = await poseDetection.createDetector(
-        poseDetection.SupportedModels.MoveNet,
-        {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
-        }
-      );
-      console.log("PoseDetectionモデル読み込み完了");
+      try {
+        poseModel = await poseDetection.createDetector(
+          poseDetection.SupportedModels.MoveNet,
+          {
+            modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
+          }
+        );
+        console.log("PoseDetectionモデル読み込み完了");
+      } catch (modelError) {
+        console.error("モデル読み込みエラー:", modelError);
+        throw new Error(`PoseDetectionモデルの読み込みに失敗しました: ${modelError.message}`);
+      }
     }
 
     // 動画要素を作成
@@ -359,137 +388,155 @@ async function performPoseEstimation(videoData) {
     video.muted = true;
     video.crossOrigin = "anonymous";
 
+    // 動画読み込み完了イベント
     video.onloadeddata = async () => {
-      console.log("骨格推定用動画読み込み完了");
+      try {
+        console.log("骨格推定用動画読み込み完了");
 
-      // 元動画と同じサイズでキャンバスサイズを設定
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      console.log(`静的キャンバスサイズ設定: ${canvas.width}x${canvas.height}`);
+        // 元動画と同じサイズでキャンバスサイズを設定
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        console.log(`静的キャンバスサイズ設定: ${canvas.width}x${canvas.height}`);
 
-      // 複数のフレームで骨格推定を試行
-      const framesToTry = [
-        video.duration * 0.1, // 10%地点
-        video.duration * 0.3, // 30%地点
-        video.duration * 0.5, // 50%地点
-        video.duration * 0.7, // 70%地点
-        video.duration * 0.9, // 90%地点
-      ];
+        // 動画サイズが有効か確認
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          throw new Error("動画サイズが無効です");
+        }
 
-      let bestPose = null;
-      let bestScore = 0;
-      let bestFrame = video.duration * 0.5; // デフォルトは中間
+        // 複数のフレームで骨格推定を試行
+        const framesToTry = [
+          video.duration * 0.1, // 10%地点
+          video.duration * 0.3, // 30%地点
+          video.duration * 0.5, // 50%地点
+          video.duration * 0.7, // 70%地点
+          video.duration * 0.9, // 90%地点
+        ];
 
-      for (let i = 0; i < framesToTry.length; i++) {
-        const timePoint = framesToTry[i];
-        console.log(
-          `フレーム ${i + 1}/${
-            framesToTry.length
-          } を試行中... (${timePoint.toFixed(2)}s)`
-        );
+        let bestPose = null;
+        let bestScore = 0;
+        let bestFrame = video.duration * 0.5; // デフォルトは中間
 
-        video.currentTime = timePoint;
+        for (let i = 0; i < framesToTry.length; i++) {
+          const timePoint = framesToTry[i];
+          console.log(
+            `フレーム ${i + 1}/${
+              framesToTry.length
+            } を試行中... (${timePoint.toFixed(2)}s)`
+          );
 
-        await new Promise((resolve) => {
-          video.onseeked = async () => {
-            try {
-              // フレームをキャンバスに描画
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          video.currentTime = timePoint;
 
-              // 骨格推定実行（キャンバスから推定）
-              const poses = await poseModel.estimatePoses(canvas);
-              console.log(
-                `フレーム ${i + 1} - 検出されたポーズ数:`,
-                poses.length
-              );
+          await new Promise((resolve) => {
+            video.onseeked = async () => {
+              try {
+                // フレームをキャンバスに描画
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-              if (poses.length > 0) {
-                const pose = poses[0];
-                const avgScore =
-                  pose.keypoints.reduce((sum, kp) => sum + kp.score, 0) /
-                  pose.keypoints.length;
+                // 骨格推定実行（キャンバスから推定）
+                const poses = await poseModel.estimatePoses(canvas);
                 console.log(
-                  `フレーム ${i + 1} - 平均スコア:`,
-                  avgScore.toFixed(3)
+                  `フレーム ${i + 1} - 検出されたポーズ数:`,
+                  poses.length
                 );
 
-                if (avgScore > bestScore) {
-                  bestPose = pose;
-                  bestScore = avgScore;
-                  bestFrame = timePoint;
+                if (poses && poses.length > 0) {
+                  const pose = poses[0];
+                  const avgScore =
+                    pose.keypoints.reduce((sum, kp) => sum + (kp.score || 0), 0) /
+                    pose.keypoints.length;
                   console.log(
-                    `新しいベストポーズを発見! スコア: ${avgScore.toFixed(3)}`
+                    `フレーム ${i + 1} - 平均スコア:`,
+                    avgScore.toFixed(3)
                   );
+
+                  if (avgScore > bestScore) {
+                    bestPose = pose;
+                    bestScore = avgScore;
+                    bestFrame = timePoint;
+                    console.log(
+                      `新しいベストポーズを発見! スコア: ${avgScore.toFixed(3)}`
+                    );
+                  }
                 }
+
+                resolve();
+              } catch (error) {
+                console.error(`フレーム ${i + 1} でエラー:`, error);
+                resolve();
               }
+            };
+          });
 
-              resolve();
-            } catch (error) {
-              console.error(`フレーム ${i + 1} でエラー:`, error);
-              resolve();
+          // 少し待機
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+
+        // 最良のフレームを表示
+        video.currentTime = bestFrame;
+
+        video.onseeked = async () => {
+          try {
+            console.log("最終フレーム表示中...");
+
+            // 動画フレームをキャンバスに描画
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (bestPose) {
+              // 現在のポーズデータを保存（評価で使用）
+              window.currentPose = bestPose;
+
+              // 骨格を描画
+              drawSkeleton(
+                ctx,
+                bestPose.keypoints,
+                canvas.width / video.videoWidth,
+                canvas.height / video.videoHeight
+              );
+
+              // 評価を更新
+              generateEvaluation();
+            } else {
+              console.log("全フレームでポーズが検出されませんでした");
+
+              // メッセージを表示
+              ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+              ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+
+              ctx.fillStyle = "#FFFFFF";
+              ctx.font = "14px Arial";
+              ctx.textAlign = "center";
+              ctx.fillText(
+                "ポーズが検出されませんでした",
+                canvas.width / 2,
+                canvas.height - 35
+              );
+              ctx.fillText(
+                "人が明確に映っているか確認してください",
+                canvas.width / 2,
+                canvas.height - 15
+              );
             }
-          };
-        });
-
-        // 少し待機
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      }
-
-      // 最良のフレームを表示
-      video.currentTime = bestFrame;
-
-      video.onseeked = async () => {
-        try {
-          console.log("最終フレーム表示中...");
-
-          // 動画フレームをキャンバスに描画
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          if (bestPose) {
-            // 現在のポーズデータを保存（評価で使用）
-            window.currentPose = bestPose;
-
-            // 骨格を描画
-            drawSkeleton(
-              ctx,
-              bestPose.keypoints,
-              canvas.width / video.videoWidth,
-              canvas.height / video.videoHeight
-            );
-
-            // 評価を更新
-            generateEvaluation();
-          } else {
-            console.log("全フレームでポーズが検出されませんでした");
-
-            // メッセージを表示
-            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-            ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
-
-            ctx.fillStyle = "#FFFFFF";
+          } catch (error) {
+            console.error("骨格推定エラー:", error);
+            ctx.fillStyle = "#ff0000";
             ctx.font = "14px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(
-              "ポーズが検出されませんでした",
-              canvas.width / 2,
-              canvas.height - 35
-            );
-            ctx.fillText(
-              "人が明確に映っているか確認してください",
-              canvas.width / 2,
-              canvas.height - 15
-            );
+            ctx.fillText("骨格推定エラー", canvas.width / 2, canvas.height / 2);
           }
-        } catch (error) {
-          console.error("骨格推定エラー:", error);
-          ctx.fillStyle = "#ff0000";
-          ctx.font = "14px Arial";
-          ctx.textAlign = "center";
-          ctx.fillText("骨格推定エラー", canvas.width / 2, canvas.height / 2);
-        }
-      };
+        };
+      } catch (error) {
+        console.error("動画処理エラー:", error);
+        ctx.fillStyle = "#ff0000";
+        ctx.font = "14px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          `動画処理エラー: ${error.message}`,
+          canvas.width / 2,
+          canvas.height / 2
+        );
+      }
     };
 
     video.onerror = (error) => {
@@ -524,6 +571,11 @@ async function performPoseEstimation(videoData) {
 
 // 骨格の描画
 function drawSkeleton(ctx, keypoints, scaleX = 1, scaleY = 1) {
+  if (!ctx || !keypoints || !Array.isArray(keypoints)) {
+    console.warn("骨格描画: 無効なパラメータです");
+    return;
+  }
+
   console.log("骨格描画開始", keypoints.length, "個のキーポイント");
 
   // 骨格のつながりを定義 (COCO format)
@@ -551,7 +603,7 @@ function drawSkeleton(ctx, keypoints, scaleX = 1, scaleY = 1) {
 
   // 関節点を描画
   keypoints.forEach((point, index) => {
-    if (point.score > 0.2) {
+    if (point && point.score && point.score > 0.2 && point.x !== undefined && point.y !== undefined) {
       // スコア閾値を下げる
       ctx.beginPath();
       ctx.arc(point.x * scaleX, point.y * scaleY, 5, 0, 2 * Math.PI); // 少し大きく
@@ -565,17 +617,23 @@ function drawSkeleton(ctx, keypoints, scaleX = 1, scaleY = 1) {
 
   // 骨格線を描画
   connections.forEach(([i, j]) => {
-    const pointA = keypoints[i];
-    const pointB = keypoints[j];
+    if (i < keypoints.length && j < keypoints.length) {
+      const pointA = keypoints[i];
+      const pointB = keypoints[j];
 
-    if (pointA && pointB && pointA.score > 0.2 && pointB.score > 0.2) {
-      // スコア閾値を下げる
-      ctx.beginPath();
-      ctx.moveTo(pointA.x * scaleX, pointA.y * scaleY);
-      ctx.lineTo(pointB.x * scaleX, pointB.y * scaleY);
-      ctx.strokeStyle = "#00FF00";
-      ctx.lineWidth = 4; // 少し太く
-      ctx.stroke();
+      if (pointA && pointB && 
+          pointA.score && pointB.score &&
+          pointA.score > 0.2 && pointB.score > 0.2 &&
+          pointA.x !== undefined && pointA.y !== undefined &&
+          pointB.x !== undefined && pointB.y !== undefined) {
+        // スコア閾値を下げる
+        ctx.beginPath();
+        ctx.moveTo(pointA.x * scaleX, pointA.y * scaleY);
+        ctx.lineTo(pointB.x * scaleX, pointB.y * scaleY);
+        ctx.strokeStyle = "#00FF00";
+        ctx.lineWidth = 4; // 少し太く
+        ctx.stroke();
+      }
     }
   });
 
@@ -666,12 +724,12 @@ function generateEvaluation() {
   if (evaluationList) {
     evaluationList.innerHTML = "";
 
-    evaluations.forEach((eval) => {
+    evaluations.forEach((evaluation) => {
       const li = document.createElement("li");
       li.className = "evaluation-item";
       li.innerHTML = `
-        <span class="body-part">${eval.part}</span>
-        <span class="score ${eval.class}">${eval.score} ${eval.rating}</span>
+        <span class="body-part">${evaluation.part}</span>
+        <span class="score ${evaluation.class}">${evaluation.score} ${evaluation.rating}</span>
       `;
       evaluationList.appendChild(li);
     });
@@ -985,46 +1043,65 @@ function showDetailedAnalysis() {
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("ページロード開始");
 
-  // ボタンが存在するか確認
-  const testBtn = document.querySelector('button[onclick="showTestResult()"]');
-  const debugBtn = document.querySelector('button[onclick="showDebugInfo()"]');
-  const backBtn = document.querySelector('button[onclick="goBack()"]');
-
-  console.log("テストボタン存在:", testBtn ? "あり" : "なし");
-  console.log("デバッグボタン存在:", debugBtn ? "あり" : "なし");
-  console.log("戻るボタン存在:", backBtn ? "あり" : "なし");
-
-  const videoFileName = getVideoFromParams();
-  console.log("動画ファイル名:", videoFileName);
-
-  if (videoFileName) {
-    const videoData = localStorage.getItem(`video_${videoFileName}`);
-    console.log("取得した動画データ:", videoData ? "存在" : "なし");
-
-    if (videoData) {
-      if (videoData.startsWith("blob:")) {
-        console.error("BlobURLが保存されています - 無効です");
-        showError(
-          "動画データが無効です",
-          "動画データの形式が無効になっています。メインページに戻って動画を再選択してください。"
-        );
-        return;
-      }
-
-      // 自動的にテスト表示を実行
-      setTimeout(() => {
-        showTestResult();
-      }, 1000);
-    } else {
-      console.error("動画データが見つかりません");
-      showError(
-        "動画データが見つかりません",
-        `動画ファイル名: ${videoFileName}`
-      );
+  try {
+    // 必要なライブラリの存在確認
+    if (typeof tf === "undefined") {
+      throw new Error("TensorFlow.jsが読み込まれていません");
     }
-  } else {
-    console.error("動画が指定されていません");
-    showError("動画が指定されていません", "URLパラメータを確認してください");
+
+    if (typeof poseDetection === "undefined") {
+      throw new Error("PoseDetectionライブラリが読み込まれていません");
+    }
+
+    console.log("ライブラリ確認完了");
+
+    // ボタンが存在するか確認
+    const testBtn = document.querySelector('button[onclick="showTestResult()"]');
+    const debugBtn = document.querySelector('button[onclick="showDebugInfo()"]');
+    const backBtn = document.querySelector('button[onclick="goBack()"]');
+
+    console.log("テストボタン存在:", testBtn ? "あり" : "なし");
+    console.log("デバッグボタン存在:", debugBtn ? "あり" : "なし");
+    console.log("戻るボタン存在:", backBtn ? "あり" : "なし");
+
+    const videoFileName = getVideoFromParams();
+    console.log("動画ファイル名:", videoFileName);
+
+    if (videoFileName) {
+      const videoData = localStorage.getItem(`video_${videoFileName}`);
+      console.log("取得した動画データ:", videoData ? "存在" : "なし");
+
+      if (videoData) {
+        if (videoData.startsWith("blob:")) {
+          console.error("BlobURLが保存されています - 無効です");
+          showError(
+            "動画データが無効です",
+            "動画データの形式が無効になっています。メインページに戻って動画を再選択してください。"
+          );
+          return;
+        }
+
+        // 自動的にテスト表示を実行
+        setTimeout(() => {
+          showTestResult();
+        }, 1000);
+      } else {
+        console.error("動画データが見つかりません");
+        showError(
+          "動画データが見つかりません",
+          `動画ファイル名: ${videoFileName}`
+        );
+      }
+    } else {
+      console.error("動画が指定されていません");
+      showError("動画が指定されていません", "URLパラメータを確認してください");
+    }
+  } catch (error) {
+    console.error("初期化エラー:", error);
+    showError(
+      "初期化エラー",
+      `エラー詳細: ${error.message}`
+    );
   }
 });
 
