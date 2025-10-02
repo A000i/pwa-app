@@ -240,6 +240,32 @@ async function loadVideoList() {
 // ページロード時に一覧表示
 loadVideoList();
 
+// LocalStorageの古いデータをクリーンアップする関数
+function cleanupOldVideoData() {
+  console.log("LocalStorageのクリーンアップを開始");
+  let cleanedCount = 0;
+  
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('video_')) {
+      const value = localStorage.getItem(key);
+      // 画像データの場合は削除
+      if (value && value.startsWith('data:image/')) {
+        console.log(`古い画像データを削除: ${key}`);
+        localStorage.removeItem(key);
+        cleanedCount++;
+      }
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`${cleanedCount}個の古い画像データをクリーンアップしました`);
+  }
+}
+
+// ページロード時にクリーンアップを実行
+cleanupOldVideoData();
+
 // 骨格推定・canvas関連の処理を無効化（元動画のみ再生）
 
 function drawPoses(poses) {
@@ -326,10 +352,22 @@ analysisBtn.addEventListener("click", async () => {
       analysisBtn.disabled = true;
       analysisBtn.textContent = "処理中...";
 
-      // CORS問題を回避するため、Firebase URLから動画データを取得してBase64に変換
-      await convertFirebaseVideoToBase64(currentVideoURL, currentVideoFilename);
+      // 古いデータをクリア（画像データが残っている場合）
+      const oldData = localStorage.getItem(`video_${currentVideoFilename}`);
+      if (oldData && oldData.startsWith("data:image/")) {
+        console.log("古い画像データを検出、クリアします");
+        localStorage.removeItem(`video_${currentVideoFilename}`);
+      }
 
-      console.log("LocalStorageに保存完了");
+      // Firebase Storage URLを直接保存（Base64変換は行わない）
+      console.log("Firebase URLを保存:", {
+        key: `video_${currentVideoFilename}`,
+        url: currentVideoURL,
+        isFirebaseURL: currentVideoURL.includes('firebasestorage.googleapis.com')
+      });
+      
+      localStorage.setItem(`video_${currentVideoFilename}`, currentVideoURL);
+      console.log("URLをLocalStorageに保存完了");
 
       // 解析ページに遷移
       window.location.href = `analysis.html?video=${encodeURIComponent(
@@ -385,101 +423,4 @@ analysisBtn.addEventListener("click", async () => {
   }
 });
 
-// Firebase StorageのURLから動画データを取得してBase64に変換する関数
-async function convertFirebaseVideoToBase64(url, filename) {
-  try {
-    console.log("Firebase URLから動画データを取得中...");
-    
-    // まずFirebase Storage SDKを試行
-    try {
-      const storageRef = storage.refFromURL(url);
-      const blob = await storageRef.getBlob();
-      
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const dataUrl = e.target.result;
-          localStorage.setItem(`video_${filename}`, dataUrl);
-          console.log("Firebase SDK経由でBase64変換完了、LocalStorageに保存");
-          resolve(dataUrl);
-        };
-        reader.onerror = function(error) {
-          console.error("FileReader エラー:", error);
-          reject(error);
-        };
-        reader.readAsDataURL(blob);
-      });
-    } catch (sdkError) {
-      console.log("Firebase SDK経由失敗、代替手段を試行:", sdkError);
-      
-      // 代替手段: プロキシ経由またはfetch with no-cors
-      try {
-        // GitHub Pages用の代替手段
-        const response = await fetch(url, {
-          mode: 'no-cors',  // CORSを回避
-          credentials: 'omit'
-        });
-        
-        if (!response.ok && response.type !== 'opaque') {
-          throw new Error('フェッチに失敗しました');
-        }
-        
-        // no-corsモードでは直接Blobを取得できないため、
-        // video要素経由でキャンバスに描画してデータを取得
-        return await captureVideoAsDataURL(url, filename);
-        
-      } catch (fetchError) {
-        console.error("Fetch代替手段も失敗:", fetchError);
-        
-        // 最終手段: URLをそのまま保存（ローカルでのみ動作）
-        console.log("最終手段: URLを直接保存");
-        localStorage.setItem(`video_${filename}`, url);
-        return url;
-      }
-    }
-  } catch (error) {
-    console.error("Firebase動画取得エラー:", error);
-    throw new Error("動画データの取得に失敗しました。ネットワーク接続を確認してください。");
-  }
-}
 
-// ビデオ要素とキャンバスを使用してデータURLを取得
-async function captureVideoAsDataURL(videoUrl, filename) {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';  // CORS設定
-    video.preload = 'metadata';
-    
-    video.onloadeddata = function() {
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
-        // 最初のフレームをキャプチャ
-        ctx.drawImage(video, 0, 0);
-        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-        
-        // 簡易的なデータとして保存（実際の動画ではないが、分析には使用可能）
-        localStorage.setItem(`video_${filename}`, dataURL);
-        console.log("キャンバス経由でデータURL作成完了");
-        resolve(dataURL);
-      } catch (canvasError) {
-        console.error("キャンバス処理エラー:", canvasError);
-        // それでも失敗した場合はURLを保存
-        localStorage.setItem(`video_${filename}`, videoUrl);
-        resolve(videoUrl);
-      }
-    };
-    
-    video.onerror = function(error) {
-      console.error("ビデオ読み込みエラー:", error);
-      // エラーでもURLを保存して続行
-      localStorage.setItem(`video_${filename}`, videoUrl);
-      resolve(videoUrl);
-    };
-    
-    video.src = videoUrl;
-  });
-}
