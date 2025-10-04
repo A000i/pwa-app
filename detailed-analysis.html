@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>詳細分析 - バスケットボール姿勢分析</title>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: linear-gradient(
+          135deg,
+          #9bb0ff 0%,
+          #8ba5ff 50%,
+          #a5b5ff 100%
+        );
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: transparent;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #2e318f, #4a47a3);
+        color: white;
+        padding: 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .header-info {
+        text-align: left;
+      }
+
+      .header-info h1 {
+        margin: 0;
+        font-size: 2.2em;
+      }
+
+      .header-info p {
+        margin: 10px 0 0 0;
+        opacity: 0.9;
+      }
+
+      .nav-buttons {
+        display: flex;
+        gap: 15px;
+      }
+
+      .nav-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+      }
+
+      .nav-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
+      }
+
+      .content {
+        padding: 30px;
+      }
+
+      .analysis-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+      }
+
+      .analysis-section {
+        background: #f8f9ff;
+        border-radius: 10px;
+        padding: 25px;
+        border: 1px solid #e0e6ff;
+      }
+
+      .section-title {
+        color: #2e318f;
+        font-size: 1.4em;
+        font-weight: bold;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #2e318f;
+        padding-bottom: 10px;
+      }
+
+      .evaluation-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 0;
+        border-bottom: 1px solid #e0e6ff;
+      }
+
+      .evaluation-item:last-child {
+        border-bottom: none;
+      }
+
+      .part-name {
+        font-weight: 600;
+        font-size: 1.1em;
+      }
+
+      .score-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+
+      .score-value {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .score-detail {
+        font-size: 0.9em;
+        color: #666;
+      }
+
+      .excellent {
+        color: #28a745;
+      }
+      .good {
+        color: #17a2b8;
+      }
+      .normal {
+        color: #ffc107;
+      }
+      .poor {
+        color: #dc3545;
+      }
+
+      .recommendations {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 10px;
+        padding: 25px;
+        margin-top: 30px;
+      }
+
+      .recommendations h3 {
+        color: #856404;
+        margin-top: 0;
+      }
+
+      .recommendation-list {
+        list-style: none;
+        padding: 0;
+      }
+
+      .recommendation-list li {
+        background: white;
+        margin: 10px 0;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid #ffc107;
+      }
+
+      .controls {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e6ff;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #2e318f, #4a47a3);
+        color: white;
+        padding: 12px 25px;
+        border: none;
+        border-radius: 25px;
+        font-size: 1.1em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+        margin: 0 10px;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(46, 49, 143, 0.3);
+      }
+
+      .btn-secondary {
+        background: #6c757d;
+      }
+
+      .btn-gray {
+        background: #2e318f;
+      }
+
+      .chart-container {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #e0e6ff;
+        overflow-x: auto;
+      }
+
+      .chart-container canvas {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+      }
+
+      @media (max-width: 768px) {
+        .analysis-grid {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+
+        .container {
+          margin: 10px;
+          border-radius: 10px;
+        }
+
+        .header {
+          flex-direction: column;
+          gap: 20px;
+          text-align: center;
+        }
+
+        .nav-buttons {
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
+        body {
+          padding: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="header-info">
+          <h1>詳細分析結果</h1>
+          <p id="videoInfo">動画: 読み込み中... | 選手: 読み込み中...</p>
+        </div>
+        <div class="nav-buttons">
+          <button class="nav-btn" onclick="goBackToVideos()">
+            📁 動画一覧に戻る
+          </button>
+          <button class="nav-btn" onclick="goHome()">🏠 ホームに戻る</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="analysis-grid">
+          <!-- 基本姿勢評価 -->
+          <div class="analysis-section">
+            <h2 class="section-title">🏀 基本姿勢評価</h2>
+            <div id="basicPostureAnalysis">
+              <!-- JavaScript で動的に生成 -->
+            </div>
+          </div>
+
+          <!-- 動作別評価 -->
+          <div class="analysis-section">
+            <h2 class="section-title">
+              <span style="font-size: 1.3em">⛹🏻</span> 動作別評価
+            </h2>
+            <div id="actionAnalysis">
+              <!-- JavaScript で動的に生成 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 総合スコアチャート -->
+        <div class="chart-container">
+          <h3 class="section-title">📈 総合スコア</h3>
+          <canvas id="scoreChart" width="700" height="450"></canvas>
+        </div>
+
+        <!-- 改善提案 -->
+        <div class="recommendations">
+          <h3>💡 改善提案</h3>
+          <ul class="recommendation-list" id="recommendationList">
+            <!-- JavaScript で動的に生成 -->
+          </ul>
+        </div>
+
+        <div class="controls">
+          <button class="btn btn-secondary" onclick="goBack()">← 戻る</button>
+          <button class="btn btn-gray" onclick="downloadReport()">
+            📄 レポート出力
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="detailed-analysis.js"></script>
+  </body>
+</html>
