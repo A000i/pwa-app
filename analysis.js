@@ -24,8 +24,77 @@ let originalVideo = null;
 let skeletonCanvas = null;
 let skeletonCtx = null;
 
+// Firebase Storageから動画を読み込む関数
+async function loadVideoFromFirebase(filename, personInfo) {
+  try {
+    console.log("Firebase から動画を読み込み中:", filename);
+    const storage = firebase.storage();
+    const storageRef = storage.ref();
+    const videoRef = storageRef.child(`videos/${personInfo.id}/${filename}`);
+
+    const downloadURL = await videoRef.getDownloadURL();
+    console.log("動画URL取得成功:", downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error("Firebase 動画読み込みエラー:", error);
+    return null;
+  }
+}
+
 // 動画詳細ページから渡された動画情報を読み込み
 function loadAnalysisVideo() {
+  // まずURLパラメータをチェック
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlVideo = urlParams.get("video");
+  const urlPerson = urlParams.get("person");
+
+  console.log("URLパラメータ - 動画:", urlVideo, "選手:", urlPerson);
+
+  // URLパラメータがある場合は、それを優先してlocalStorageに保存
+  if (urlVideo && urlPerson) {
+    console.log("URLパラメータから動画を読み込み:", urlVideo);
+
+    // 選手情報をlocalStorageから取得
+    const storedPerson = localStorage.getItem("currentPerson");
+    if (storedPerson) {
+      try {
+        const personInfo = JSON.parse(storedPerson);
+        console.log("選手情報を復元:", personInfo);
+
+        // Firebase Storageから動画URLを取得
+        loadVideoFromFirebase(urlVideo, personInfo)
+          .then((videoUrl) => {
+            if (videoUrl) {
+              const videoInfo = {
+                filename: urlVideo,
+                personId: urlPerson,
+                url: videoUrl,
+                timestamp: Date.now(),
+              };
+              localStorage.setItem("analysisVideo", JSON.stringify(videoInfo));
+              console.log("URLパラメータから動画情報を設定:", videoInfo);
+
+              // 動画を即座に読み込み
+              const video =
+                document.getElementById("originalVideo") ||
+                document.getElementById("myVideo");
+              if (video) {
+                video.src = videoUrl;
+                video.style.display = "block";
+                video.crossOrigin = "anonymous";
+                console.log("動画が読み込まれました:", urlVideo);
+              }
+            }
+          })
+          .catch((error) => {
+            console.error("Firebase から動画読み込みエラー:", error);
+          });
+      } catch (error) {
+        console.error("選手情報の解析エラー:", error);
+      }
+    }
+  }
+
   const analysisVideo = localStorage.getItem("analysisVideo");
   if (analysisVideo) {
     try {
@@ -111,7 +180,21 @@ function blobToDataURL(blob) {
 
 // 戻るボタン
 function goBack() {
-  // 新しいホームページに直接遷移
+  // 現在の選手情報から動画一覧ページに戻る
+  const currentPerson = localStorage.getItem("currentPerson");
+  if (currentPerson) {
+    try {
+      const personInfo = JSON.parse(currentPerson);
+      window.location.href = `person-videos.html?person=${encodeURIComponent(
+        personInfo.id
+      )}`;
+      return;
+    } catch (error) {
+      console.error("選手情報の解析エラー:", error);
+    }
+  }
+
+  // 選手情報がない場合はホームに戻る
   window.location.href = "home.html";
 }
 

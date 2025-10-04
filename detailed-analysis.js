@@ -1203,7 +1203,36 @@ function analyzeStanceWidth(keypoints) {
 
 // 戻るボタン
 function goBack() {
-  window.history.back();
+  // 現在の動画情報を取得
+  const urlParams = new URLSearchParams(window.location.search);
+  const videoName = urlParams.get("video");
+  const personId = urlParams.get("person");
+
+  console.log("戻る処理 - 動画名:", videoName, "選手ID:", personId);
+
+  // localStorage に動画情報を保存してからanalysis.htmlに遷移
+  if (videoName && personId) {
+    // 現在の選手情報をlocalStorageに保存
+    if (currentPerson) {
+      localStorage.setItem("currentPerson", JSON.stringify(currentPerson));
+    }
+
+    // 動画情報をlocalStorageに保存
+    const videoInfo = {
+      filename: videoName,
+      personId: personId,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem("analysisVideo", JSON.stringify(videoInfo));
+
+    // URLパラメータ付きでanalysis.htmlに遷移
+    window.location.href = `analysis.html?video=${encodeURIComponent(
+      videoName
+    )}&person=${encodeURIComponent(personId)}`;
+  } else {
+    console.log("動画情報が不足しています。ホームに戻ります。");
+    window.location.href = "home.html";
+  }
 }
 
 // レポート出力
