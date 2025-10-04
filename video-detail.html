@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>動画詳細 - バスケットボール姿勢分析</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      body {
+        font-family: "Segoe UI", "Meiryo", sans-serif;
+        background: linear-gradient(
+          135deg,
+          #9bb0ff 0%,
+          #8ba5ff 50%,
+          #a5b5ff 100%
+        );
+        margin: 0;
+        padding: 0;
+      }
+
+      .header-nav {
+        background: #2e318f;
+        color: white;
+        padding: 15px 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .header-info h2 {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+
+      .header-info p {
+        margin: 5px 0 0 0;
+        opacity: 0.9;
+        font-size: 0.95rem;
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .nav-buttons {
+        display: flex;
+        gap: 15px;
+      }
+
+      .nav-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+      }
+
+      .nav-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .login-info-inline {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .login-btn-inline {
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+      }
+
+      .login-btn-inline:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .logout-btn-inline {
+        padding: 6px 12px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        display: none;
+      }
+
+      .main-layout {
+        display: flex;
+        flex-direction: row;
+        gap: 24px;
+        max-width: 1400px;
+        margin: 32px auto;
+        padding: 24px;
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      .column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .player-area {
+        flex: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .player-area h2 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+        color: #2e318f;
+      }
+      #videoPlayer {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        margin-bottom: 16px;
+      }
+      #poseCanvas {
+        width: 100%;
+        max-width: 640px;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      }
+      .comment-area {
+        flex: 1;
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      }
+      .comment-area h2 {
+        font-size: 1.2rem;
+        margin-bottom: 16px;
+        color: #2e318f;
+      }
+      #commentInput {
+        font-size: 1.1rem;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        width: 100%;
+        margin-bottom: 12px;
+        box-sizing: border-box;
+      }
+      #sendComment {
+        font-size: 1.1rem;
+        padding: 12px 24px;
+        border-radius: 8px;
+        background: #2e318f;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
+      }
+      #sendComment:hover {
+        background: #1e225c;
+      }
+      #sendComment:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      #commentList {
+        font-size: 1rem;
+        padding-left: 0;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      #commentList li {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+        list-style: none;
+        background: #fff;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+      .control-area {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      .control-buttons {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .control-btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+      .primary-btn {
+        background: #2e318f;
+        color: white;
+      }
+      .primary-btn:hover:not(:disabled) {
+        background: #1e225c;
+        transform: translateY(-2px);
+      }
+      .secondary-btn {
+        background: #6c757d;
+        color: white;
+      }
+      .secondary-btn:hover:not(:disabled) {
+        background: #545b62;
+      }
+      .success-btn {
+        background: #2e318f;
+        color: white;
+      }
+      .success-btn:hover:not(:disabled) {
+        background: #1e225c;
+      }
+      .control-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }
+      #poseLoading {
+        background: #fff3cd;
+        color: #856404;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        margin: 15px 0;
+        border: 1px solid #ffeaa7;
+      }
+      @media (max-width: 900px) {
+        .main-layout {
+          flex-direction: column;
+          gap: 16px;
+          margin: 16px;
+          padding: 16px;
+        }
+        .header-nav {
+          flex-direction: column;
+          gap: 15px;
+          text-align: center;
+          padding: 15px 20px;
+        }
+        .header-right {
+          flex-direction: column;
+          gap: 15px;
+        }
+        .nav-buttons {
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        .control-buttons {
+          flex-direction: column;
+          align-items: center;
+        }
+        .control-btn {
+          width: 200px;
+        }
+        .login-info-inline {
+          justify-content: center;
+        }
+      }
+      /* 古いログインエリアは削除 - ヘッダーに統合済み
+      .login-area {
+        position: fixed;
+        top: 24px;
+        right: 32px;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 1.1rem;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 12px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+      }
+      .login-btn {
+        padding: 8px 18px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        background: #2e318f;
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .login-btn:hover {
+        background: #1e225c;
+      }
+      .logout-btn {
+        padding: 8px 18px;
+        border-radius: 8px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: none;
+      }
+      */
+    </style>
+  </head>
+  <body>
+    <!-- ヘッダーナビゲーション -->
+    <div class="header-nav">
+      <div class="header-info">
+        <h2 id="currentVideoTitle">動画読み込み中...</h2>
+        <p id="personInfo">選手: 読み込み中...</p>
+      </div>
+      <div class="header-right">
+        <!-- ログイン情報 -->
+        <div class="login-info-inline">
+          <span id="loginInfo">未ログイン</span>
+          <button id="loginBtn" class="login-btn-inline">ログイン</button>
+          <button id="logoutBtn" class="logout-btn-inline">ログアウト</button>
+        </div>
+        <!-- ナビゲーションボタン -->
+        <div class="nav-buttons">
+          <button class="nav-btn" onclick="goBack()">📁 動画一覧に戻る</button>
+          <button class="nav-btn" onclick="goHome()">🏠 ホームに戻る</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-layout">
+      <div class="column player-area">
+        <h2>動画再生・解析</h2>
+
+        <!-- コントロールエリア -->
+        <div class="control-area">
+          <div class="control-buttons">
+            <button
+              id="playBtn"
+              class="control-btn secondary-btn"
+              style="display: none"
+            >
+              再生
+            </button>
+            <button
+              id="pauseBtn"
+              class="control-btn secondary-btn"
+              style="display: none"
+            >
+              停止
+            </button>
+            <button
+              id="analysisBtn"
+              class="control-btn success-btn"
+              style="display: none"
+            >
+              骨格推定解析
+            </button>
+          </div>
+        </div>
+
+        <!-- 動画プレイヤー -->
+        <video
+          id="videoPlayer"
+          width="640"
+          controls
+          style="display: none"
+        ></video>
+
+        <!-- 骨格推定キャンバス -->
+        <canvas
+          id="poseCanvas"
+          width="640"
+          height="480"
+          style="border: 1px solid #ccc; display: none"
+        ></canvas>
+
+        <!-- ローディング表示 -->
+        <div id="poseLoading" style="display: none">骨格推定中...</div>
+      </div>
+
+      <div class="column comment-area">
+        <h2>コメント</h2>
+        <input
+          type="text"
+          id="commentInput"
+          placeholder="コメントを入力（例: 1:23 良いフォーム）"
+          disabled
+        />
+        <button id="sendComment" disabled>送信</button>
+        <div style="max-height: 400px; overflow-y: auto">
+          <ul id="commentList"></ul>
+        </div>
+      </div>
+    </div>
+
+    <script src="video-detail.js"></script>
+  </body>
+</html>

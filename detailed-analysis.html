@@ -10,7 +10,12 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         margin: 0;
         padding: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(
+          135deg,
+          #9bb0ff 0%,
+          #8ba5ff 50%,
+          #a5b5ff 100%
+        );
         min-height: 100vh;
       }
 
@@ -27,17 +32,46 @@
         background: linear-gradient(135deg, #2e318f, #4a47a3);
         color: white;
         padding: 30px;
-        text-align: center;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
 
-      .header h1 {
+      .header-info {
+        text-align: left;
+      }
+
+      .header-info h1 {
         margin: 0;
-        font-size: 2.5em;
+        font-size: 2.2em;
       }
 
-      .header p {
+      .header-info p {
         margin: 10px 0 0 0;
         opacity: 0.9;
+      }
+
+      .nav-buttons {
+        display: flex;
+        gap: 15px;
+      }
+
+      .nav-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+      }
+
+      .nav-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
       }
 
       .content {
@@ -201,6 +235,17 @@
           border-radius: 10px;
         }
 
+        .header {
+          flex-direction: column;
+          gap: 20px;
+          text-align: center;
+        }
+
+        .nav-buttons {
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
         body {
           padding: 10px;
         }
@@ -210,8 +255,16 @@
   <body>
     <div class="container">
       <div class="header">
-        <h1>詳細分析結果</h1>
-        <p>バスケットボール姿勢の包括的分析</p>
+        <div class="header-info">
+          <h1>詳細分析結果</h1>
+          <p id="videoInfo">動画: 読み込み中... | 選手: 読み込み中...</p>
+        </div>
+        <div class="nav-buttons">
+          <button class="nav-btn" onclick="goBackToVideos()">
+            📁 動画一覧に戻る
+          </button>
+          <button class="nav-btn" onclick="goHome()">🏠 ホームに戻る</button>
+        </div>
       </div>
 
       <div class="content">

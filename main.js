@@ -1,8 +1,9 @@
 let currentVideoFilename = null; // 選択中の動画ファイル名
 let currentVideoBlob = null; // 選択中の動画データ
 let currentVideoURL = null; // 選択中の動画URL
+let currentPerson = null; // 現在の選手情報
 
-// Firebaseの初期化
+// Firebaseの初期化（最初に実行）
 const firebaseConfig = {
   apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
   authDomain: "basketball-ansys.firebaseapp.com",
@@ -16,6 +17,73 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 const storage = firebase.storage();
+
+// URLパラメータから選手情報を取得
+function getCurrentPersonFromUrl() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const personId = urlParams.get("person");
+
+  if (personId) {
+    // URLパラメータから選手IDを取得した場合
+    return { id: personId };
+  }
+
+  // localStorageから選手情報を取得
+  const storedPerson = localStorage.getItem("currentPerson");
+  if (storedPerson) {
+    try {
+      return JSON.parse(storedPerson);
+    } catch (error) {
+      console.error("選手情報の解析エラー:", error);
+    }
+  }
+
+  return null;
+}
+
+// 選手情報を設定
+currentPerson = getCurrentPersonFromUrl();
+
+// 選手情報がない場合はホームページにリダイレクト
+if (!currentPerson) {
+  window.location.href = "home.html";
+} else {
+  // DOM読み込み完了後に選手名を表示
+  document.addEventListener("DOMContentLoaded", () => {
+    updatePersonNameDisplay();
+  });
+}
+
+// 選手名表示を更新
+async function updatePersonNameDisplay() {
+  const nameElement = document.getElementById("currentPersonName");
+  if (currentPerson && currentPerson.name) {
+    nameElement.textContent = `${currentPerson.name}さんの動画`;
+  } else if (currentPerson && currentPerson.id) {
+    // IDはあるが名前がない場合、Firestoreから取得
+    try {
+      const doc = await db.collection("people").doc(currentPerson.id).get();
+      if (doc.exists) {
+        const personData = doc.data();
+        currentPerson.name = personData.name;
+        nameElement.textContent = `${personData.name}さんの動画`;
+        // localStorageも更新
+        localStorage.setItem("currentPerson", JSON.stringify(currentPerson));
+      } else {
+        nameElement.textContent = "選手情報が見つかりません";
+      }
+    } catch (error) {
+      console.error("選手情報取得エラー:", error);
+      nameElement.textContent = "選手情報読み込みエラー";
+    }
+  }
+}
+
+// ホームに戻る機能
+function goHome() {
+  window.location.href = "home.html";
+}
+
 // コメント一覧ul要素を取得
 const list = document.getElementById("commentList");
 
@@ -88,11 +156,23 @@ async function loadComments() {
   const snapshot = await db
     .collection("comments")
     .where("video", "==", currentVideoFilename)
-    .orderBy("timestamp", "desc")
     .get();
   console.log("comments count:", snapshot.size); // 追加
+
+  // クライアントサイドでソート
+  const comments = [];
   snapshot.forEach((doc) => {
-    const data = doc.data();
+    comments.push({ id: doc.id, data: doc.data() });
+  });
+
+  // タイムスタンプでソート（新しいものが上に）
+  comments.sort((a, b) => {
+    const aTime = a.data.timestamp ? a.data.timestamp.toMillis() : 0;
+    const bTime = b.data.timestamp ? b.data.timestamp.toMillis() : 0;
+    return bTime - aTime;
+  });
+
+  comments.forEach(({ data }) => {
     console.log("comment data:", data); // 追加
     const li = document.createElement("li");
     // mm:ss形式のタイムスタンプ検出＆リンク化
@@ -134,24 +214,63 @@ const pauseBtn = document.getElementById("pauseBtn");
 
 videoInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
-  if (file && currentUser) {
+  if (file && currentUser && currentPerson) {
     // 動画データを保存
     currentVideoBlob = file;
     currentVideoFilename = file.name;
 
-    // Storageへアップロード
-    const storageRef = storage.ref(`videos/${Date.now()}_${file.name}`);
+    // 選手別のStorageパスを作成
+    const storageRef = storage.ref(
+      `videos/${currentPerson.id}/${Date.now()}_${file.name}`
+    );
     await storageRef.put(file);
     const url = await storageRef.getDownloadURL();
     currentVideoURL = url; // URLを保存
 
-    // Firestoreに動画情報保存
+    // Firestoreに動画情報保存（選手別）
+    // 選手名が未定義の場合は、Firestoreから取得
+    let personName = currentPerson.name;
+    if (!personName && currentPerson.id) {
+      try {
+        const personDoc = await db
+          .collection("people")
+          .doc(currentPerson.id)
+          .get();
+        if (personDoc.exists) {
+          personName = personDoc.data().name;
+          // currentPersonも更新
+          currentPerson.name = personName;
+          localStorage.setItem("currentPerson", JSON.stringify(currentPerson));
+        }
+      } catch (error) {
+        console.error("選手名取得エラー:", error);
+        personName = "不明";
+      }
+    }
+
     await db.collection("videos").add({
       url: url,
       user: currentUser.displayName,
       filename: file.name,
       timestamp: new Date(),
+      personId: currentPerson.id,
+      personName: personName || "不明",
     });
+
+    // 選手の動画数を更新
+    if (currentPerson.id) {
+      try {
+        await db
+          .collection("people")
+          .doc(currentPerson.id)
+          .update({
+            videoCount: firebase.firestore.FieldValue.increment(1),
+          });
+      } catch (error) {
+        console.error("動画数更新エラー:", error);
+      }
+    }
+
     // 動画再生
     videoPlayer.src = url;
     videoPlayer.style.display = "";
@@ -171,12 +290,31 @@ const videoList = document.getElementById("downloadedVideoList");
 
 async function loadVideoList() {
   videoList.innerHTML = "";
+
+  if (!currentPerson) {
+    console.error("選手情報がありません");
+    return;
+  }
+
   const snapshot = await db
     .collection("videos")
-    .orderBy("timestamp", "desc")
+    .where("personId", "==", currentPerson.id)
     .get();
+
+  // クライアントサイドでソート
+  const videos = [];
   snapshot.forEach((doc) => {
-    const data = doc.data();
+    videos.push({ id: doc.id, data: doc.data() });
+  });
+
+  // タイムスタンプでソート（新しいものが上に）
+  videos.sort((a, b) => {
+    const aTime = a.data.timestamp ? a.data.timestamp.toMillis() : 0;
+    const bTime = b.data.timestamp ? b.data.timestamp.toMillis() : 0;
+    return bTime - aTime;
+  });
+
+  videos.forEach(({ data }) => {
     const li = document.createElement("li");
     // 日時表示（Firestoreのtimestamp型をDateに変換）
     let dateStr = "";
@@ -205,17 +343,17 @@ async function loadVideoList() {
     li.innerHTML = `<b>${data.user}</b>: <a href="#" data-url="${data.url}">${data.filename}</a> <span style="color:#888;font-size:0.95em;margin-left:8px;">${dateStr}</span>`;
     li.querySelector("a").addEventListener("click", async (e) => {
       e.preventDefault();
-      
+
       try {
         console.log("動画選択開始 - URL:", data.url);
-        
+
         // 動画プレイヤーにURLを設定（プレビュー用）
         videoPlayer.src = data.url;
         videoPlayer.style.display = "";
         playBtn.style.display = "";
         pauseBtn.style.display = "";
         analysisBtn.style.display = ""; // 解析ボタンを表示
-        
+
         // 動画情報を保存
         currentVideoFilename = data.filename;
         currentVideoURL = data.url;
@@ -226,7 +364,7 @@ async function loadVideoList() {
 
         // プレビューを開始
         videoPlayer.play();
-        
+
         loadComments();
       } catch (error) {
         console.error("動画選択エラー:", error);
@@ -244,20 +382,20 @@ loadVideoList();
 function cleanupOldVideoData() {
   console.log("LocalStorageのクリーンアップを開始");
   let cleanedCount = 0;
-  
+
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i);
-    if (key && key.startsWith('video_')) {
+    if (key && key.startsWith("video_")) {
       const value = localStorage.getItem(key);
       // 画像データの場合は削除
-      if (value && value.startsWith('data:image/')) {
+      if (value && value.startsWith("data:image/")) {
         console.log(`古い画像データを削除: ${key}`);
         localStorage.removeItem(key);
         cleanedCount++;
       }
     }
   }
-  
+
   if (cleanedCount > 0) {
     console.log(`${cleanedCount}個の古い画像データをクリーンアップしました`);
   }
@@ -347,7 +485,7 @@ analysisBtn.addEventListener("click", async () => {
   if (currentVideoURL && currentVideoFilename) {
     try {
       console.log("骨格推定ボタンクリック - 動画URL:", currentVideoURL);
-      
+
       // 処理中の表示
       analysisBtn.disabled = true;
       analysisBtn.textContent = "処理中...";
@@ -363,9 +501,11 @@ analysisBtn.addEventListener("click", async () => {
       console.log("Firebase URLを保存:", {
         key: `video_${currentVideoFilename}`,
         url: currentVideoURL,
-        isFirebaseURL: currentVideoURL.includes('firebasestorage.googleapis.com')
+        isFirebaseURL: currentVideoURL.includes(
+          "firebasestorage.googleapis.com"
+        ),
       });
-      
+
       localStorage.setItem(`video_${currentVideoFilename}`, currentVideoURL);
       console.log("URLをLocalStorageに保存完了");
 
@@ -376,7 +516,7 @@ analysisBtn.addEventListener("click", async () => {
     } catch (error) {
       console.error("骨格推定ボタンエラー:", error);
       alert("データの準備中にエラーが発生しました: " + error.message);
-      
+
       // ボタンを元に戻す
       analysisBtn.disabled = false;
       analysisBtn.textContent = "骨格推定解析";
@@ -385,7 +525,7 @@ analysisBtn.addEventListener("click", async () => {
     // Blobしかない場合の処理（ローカルファイル選択時）
     try {
       console.log("Blobからの処理開始");
-      
+
       // 処理中の表示
       analysisBtn.disabled = true;
       analysisBtn.textContent = "処理中...";
@@ -401,10 +541,10 @@ analysisBtn.addEventListener("click", async () => {
           currentVideoFilename
         )}`;
       };
-      reader.onerror = function(error) {
+      reader.onerror = function (error) {
         console.error("FileReader エラー:", error);
         alert("動画データの変換中にエラーが発生しました");
-        
+
         // ボタンを元に戻す
         analysisBtn.disabled = false;
         analysisBtn.textContent = "骨格推定解析";
@@ -413,7 +553,7 @@ analysisBtn.addEventListener("click", async () => {
     } catch (error) {
       console.error("Blob処理エラー:", error);
       alert("動画データの変換中にエラーが発生しました");
-      
+
       // ボタンを元に戻す
       analysisBtn.disabled = false;
       analysisBtn.textContent = "骨格推定解析";
@@ -424,7 +564,7 @@ analysisBtn.addEventListener("click", async () => {
 });
 
 // ページロード時の初期化処理
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
   // 骨格推定解析ボタンの状態をリセット
   const analysisBtn = document.getElementById("analysisBtn");
   if (analysisBtn) {

@@ -1,10 +1,63 @@
 // 詳細分析ページのJavaScript
 
 let analysisData = null;
+let currentPerson = null;
+let currentVideo = null;
+
+// URLパラメータから情報を取得
+function getPageInfo() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const videoName = urlParams.get("video");
+  const personId = urlParams.get("person");
+
+  // localStorageから選手情報を取得
+  const storedPerson = localStorage.getItem("currentPerson");
+  if (storedPerson) {
+    try {
+      currentPerson = JSON.parse(storedPerson);
+    } catch (error) {
+      console.error("選手情報の解析エラー:", error);
+    }
+  }
+
+  return {
+    videoName: videoName,
+    personId: personId || (currentPerson ? currentPerson.id : null),
+  };
+}
+
+// ナビゲーション機能
+function goBackToVideos() {
+  const pageInfo = getPageInfo();
+  if (pageInfo.personId) {
+    window.location.href = `person-videos.html?person=${pageInfo.personId}`;
+  } else {
+    window.location.href = "home.html";
+  }
+}
+
+function goHome() {
+  window.location.href = "home.html";
+}
+
+// 動画と選手情報を表示
+function updateVideoInfo() {
+  const pageInfo = getPageInfo();
+  const videoInfoElement = document.getElementById("videoInfo");
+
+  if (videoInfoElement) {
+    const videoName = pageInfo.videoName || "不明";
+    const personName = currentPerson ? currentPerson.name : "不明";
+    videoInfoElement.textContent = `動画: ${videoName} | 選手: ${personName}`;
+  }
+}
 
 // ページ読み込み時の初期化
 document.addEventListener("DOMContentLoaded", () => {
   try {
+    // 動画・選手情報を表示
+    updateVideoInfo();
+
     loadAnalysisData();
     generateDetailedAnalysis();
     drawScoreChart();
@@ -16,14 +69,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // エラー表示用関数
 function showError(title, message) {
-  const container = document.querySelector('.container');
+  const container = document.querySelector(".container");
   if (container) {
     container.innerHTML = `
       <div style="text-align: center; color: red; padding: 20px;">
         <h3>${title}</h3>
         <p>${message}</p>
         <div style="margin-top: 20px;">
-          <button onclick="goBack()" style="padding: 10px 20px; background: #2E318F; color: white; border: none; border-radius: 5px; cursor: pointer;">戻る</button>
+          <button onclick="goBackToVideos()" style="padding: 10px 20px; background: #2E318F; color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">動画一覧に戻る</button>
+          <button onclick="goHome()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">ホームに戻る</button>
         </div>
       </div>
     `;
@@ -32,8 +86,21 @@ function showError(title, message) {
 
 // 分析データの読み込み
 function loadAnalysisData() {
-  const storedData = localStorage.getItem("detailedAnalysis");
-  console.log("保存された分析データ:", storedData);
+  const pageInfo = getPageInfo();
+  const videoName = pageInfo.videoName;
+
+  // まず動画ごとの分析データを確認
+  let storedData = null;
+  if (videoName) {
+    storedData = localStorage.getItem(`analysisData_${videoName}`);
+    console.log(`動画別分析データ (${videoName}):`, storedData);
+  }
+
+  // 動画別データがない場合は一時的な分析データを確認
+  if (!storedData) {
+    storedData = localStorage.getItem("detailedAnalysis");
+    console.log("一時的な分析データ:", storedData);
+  }
 
   if (storedData) {
     try {
@@ -94,8 +161,40 @@ function generateBasicPostureAnalysis() {
       },
     ];
 
-    let html =
-      "<p style='color: orange; margin-bottom: 15px;'>⚠️ 分析データが見つかりません。分析ページから再度アクセスしてください。</p>";
+    const pageInfo = getPageInfo();
+
+    let html = `
+      <div style='background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px;'>
+        <h4 style='color: #856404; margin: 0 0 10px 0;'>📊 分析データが見つかりません</h4>
+        <p style='color: #856404; margin: 0 0 15px 0;'>この動画の詳細分析を行うには、まず骨格推定解析を実行する必要があります。</p>
+        <div style='display: flex; gap: 10px; flex-wrap: wrap;'>
+          <button onclick="goToAnalysis()" style='background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;'>
+            📹 分析ページへ移動
+          </button>
+          <button onclick="goBackToVideos()" style='background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;'>
+            ← 動画一覧に戻る
+          </button>
+        </div>
+      </div>
+    `;
+
+    // 分析ページへの移動機能を追加
+    if (!window.goToAnalysis) {
+      window.goToAnalysis = function () {
+        const pageInfo = getPageInfo();
+        if (pageInfo.videoName && pageInfo.personId) {
+          // video-detail.htmlから分析を開始
+          window.location.href = `video-detail.html?video=${encodeURIComponent(
+            pageInfo.videoName
+          )}&person=${pageInfo.personId}`;
+        } else {
+          alert(
+            "動画情報が不足しています。動画一覧から再度アクセスしてください。"
+          );
+          goBackToVideos();
+        }
+      };
+    }
     sampleEvaluations.forEach((evaluation) => {
       html += `
         <div class="evaluation-item">
@@ -135,7 +234,19 @@ function generateActionAnalysis() {
 
   if (!analysisData || !analysisData.pose) {
     console.log("動作別評価: 分析データが見つかりません");
-    // フォールバックとしてサンプルデータを表示
+
+    container.innerHTML = `
+      <div style='background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 20px;'>
+        <h4 style='color: #856404; margin: 0 0 10px 0;'>📊 分析データが見つかりません</h4>
+        <p style='color: #856404; margin: 0 0 15px 0;'>動作別評価を表示するには、まず骨格推定解析を実行してください。</p>
+        <div style='display: flex; gap: 10px; flex-wrap: wrap;'>
+          <button onclick="goToAnalysis()" style='background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;'>
+            📹 分析ページへ移動
+          </button>
+        </div>
+      </div>
+    `;
+    return;
     const sampleActionEvaluations = [
       {
         part: "シュートフォーム",
@@ -261,9 +372,15 @@ function analyzeShootingForm(keypoints) {
     const rightWrist = keypoints[10];
 
     if (
-      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
-      rightElbow && rightElbow.score && rightElbow.score > 0.5 &&
-      rightWrist && rightWrist.score && rightWrist.score > 0.5
+      rightShoulder &&
+      rightShoulder.score &&
+      rightShoulder.score > 0.5 &&
+      rightElbow &&
+      rightElbow.score &&
+      rightElbow.score > 0.5 &&
+      rightWrist &&
+      rightWrist.score &&
+      rightWrist.score > 0.5
     ) {
       const elbowAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
 
@@ -317,10 +434,18 @@ function analyzeDefenseStance(keypoints) {
     const rightKnee = keypoints[14];
 
     if (
-      leftHip && leftHip.score && leftHip.score > 0.5 &&
-      rightHip && rightHip.score && rightHip.score > 0.5 &&
-      leftKnee && leftKnee.score && leftKnee.score > 0.5 &&
-      rightKnee && rightKnee.score && rightKnee.score > 0.5
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      rightHip &&
+      rightHip.score &&
+      rightHip.score > 0.5 &&
+      leftKnee &&
+      leftKnee.score &&
+      leftKnee.score > 0.5 &&
+      rightKnee &&
+      rightKnee.score &&
+      rightKnee.score > 0.5
     ) {
       const hipCenter = { y: (leftHip.y + rightHip.y) / 2 };
       const kneeCenter = { y: (leftKnee.y + rightKnee.y) / 2 };
@@ -374,9 +499,17 @@ function analyzeDribblePosture(keypoints) {
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
-    if (nose && nose.score && nose.score > 0.5 && 
-        leftHip && leftHip.score && leftHip.score > 0.5 && 
-        rightHip && rightHip.score && rightHip.score > 0.5) {
+    if (
+      nose &&
+      nose.score &&
+      nose.score > 0.5 &&
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      rightHip &&
+      rightHip.score &&
+      rightHip.score > 0.5
+    ) {
       const hipCenter = {
         x: (leftHip.x + rightHip.x) / 2,
         y: (leftHip.y + rightHip.y) / 2,
@@ -435,10 +568,18 @@ function analyzeStability(keypoints) {
     const rightHip = keypoints[12];
 
     if (
-      leftAnkle && leftAnkle.score && leftAnkle.score > 0.5 &&
-      rightAnkle && rightAnkle.score && rightAnkle.score > 0.5 &&
-      leftHip && leftHip.score && leftHip.score > 0.5 &&
-      rightHip && rightHip.score && rightHip.score > 0.5
+      leftAnkle &&
+      leftAnkle.score &&
+      leftAnkle.score > 0.5 &&
+      rightAnkle &&
+      rightAnkle.score &&
+      rightAnkle.score > 0.5 &&
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      rightHip &&
+      rightHip.score &&
+      rightHip.score > 0.5
     ) {
       const ankleCenter = { x: (leftAnkle.x + rightAnkle.x) / 2 };
       const hipCenter = { x: (leftHip.x + rightHip.x) / 2 };
@@ -509,7 +650,9 @@ function generateRecommendations() {
 
   allEvaluations.forEach((evaluation) => {
     if (evaluation.score <= 3) {
-      recommendations.push(getRecommendation(evaluation.part, evaluation.score));
+      recommendations.push(
+        getRecommendation(evaluation.part, evaluation.score)
+      );
     }
   });
 
@@ -706,10 +849,17 @@ function getColorForClass(className) {
 // 角度計算関数（analysis.jsから複製）
 function calculateAngle(point1, point2, point3) {
   try {
-    if (!point1 || !point2 || !point3 ||
-        point1.x === undefined || point1.y === undefined ||
-        point2.x === undefined || point2.y === undefined ||
-        point3.x === undefined || point3.y === undefined) {
+    if (
+      !point1 ||
+      !point2 ||
+      !point3 ||
+      point1.x === undefined ||
+      point1.y === undefined ||
+      point2.x === undefined ||
+      point2.y === undefined ||
+      point3.x === undefined ||
+      point3.y === undefined
+    ) {
       throw new Error("無効なポイントデータです");
     }
 
@@ -787,10 +937,18 @@ function analyzeBalance(keypoints) {
     const rightHip = keypoints[12];
 
     if (
-      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
-      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
-      leftHip && leftHip.score && leftHip.score > 0.5 &&
-      rightHip && rightHip.score && rightHip.score > 0.5
+      leftShoulder &&
+      leftShoulder.score &&
+      leftShoulder.score > 0.5 &&
+      rightShoulder &&
+      rightShoulder.score &&
+      rightShoulder.score > 0.5 &&
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      rightHip &&
+      rightHip.score &&
+      rightHip.score > 0.5
     ) {
       const shoulderCenter = (leftShoulder.x + rightShoulder.x) / 2;
       const hipCenter = (leftHip.x + rightHip.x) / 2;
@@ -843,9 +1001,17 @@ function analyzeKneeAngle(keypoints) {
     const leftKnee = keypoints[13];
     const leftAnkle = keypoints[15];
 
-    if (leftHip && leftHip.score && leftHip.score > 0.5 && 
-        leftKnee && leftKnee.score && leftKnee.score > 0.5 && 
-        leftAnkle && leftAnkle.score && leftAnkle.score > 0.5) {
+    if (
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      leftKnee &&
+      leftKnee.score &&
+      leftKnee.score > 0.5 &&
+      leftAnkle &&
+      leftAnkle.score &&
+      leftAnkle.score > 0.5
+    ) {
       const angle = calculateAngle(leftHip, leftKnee, leftAnkle);
 
       if (angle >= 140 && angle <= 160) {
@@ -898,11 +1064,21 @@ function analyzeSpineAlignment(keypoints) {
     const rightHip = keypoints[12];
 
     if (
-      nose && nose.score && nose.score > 0.5 &&
-      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
-      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5 &&
-      leftHip && leftHip.score && leftHip.score > 0.5 &&
-      rightHip && rightHip.score && rightHip.score > 0.5
+      nose &&
+      nose.score &&
+      nose.score > 0.5 &&
+      leftShoulder &&
+      leftShoulder.score &&
+      leftShoulder.score > 0.5 &&
+      rightShoulder &&
+      rightShoulder.score &&
+      rightShoulder.score > 0.5 &&
+      leftHip &&
+      leftHip.score &&
+      leftHip.score > 0.5 &&
+      rightHip &&
+      rightHip.score &&
+      rightHip.score > 0.5
     ) {
       const shoulderCenter = {
         x: (leftShoulder.x + rightShoulder.x) / 2,
@@ -971,10 +1147,18 @@ function analyzeStanceWidth(keypoints) {
     const rightShoulder = keypoints[6];
 
     if (
-      leftAnkle && leftAnkle.score && leftAnkle.score > 0.5 &&
-      rightAnkle && rightAnkle.score && rightAnkle.score > 0.5 &&
-      leftShoulder && leftShoulder.score && leftShoulder.score > 0.5 &&
-      rightShoulder && rightShoulder.score && rightShoulder.score > 0.5
+      leftAnkle &&
+      leftAnkle.score &&
+      leftAnkle.score > 0.5 &&
+      rightAnkle &&
+      rightAnkle.score &&
+      rightAnkle.score > 0.5 &&
+      leftShoulder &&
+      leftShoulder.score &&
+      leftShoulder.score > 0.5 &&
+      rightShoulder &&
+      rightShoulder.score &&
+      rightShoulder.score > 0.5
     ) {
       const ankleWidth = Math.abs(leftAnkle.x - rightAnkle.x);
       const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
