@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チーム管理 - バスケットボール姿勢分析</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+        body {
+            font-family: "Segoe UI", "Meiryo", sans-serif;
+            background: linear-gradient(135deg, #9bb0ff 0%, #8ba5ff 50%, #a5b5ff 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2e318f;
+            margin: 0 0 10px 0;
+            font-size: 2.2rem;
+        }
+
+        .header p {
+            color: #666;
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            padding: 12px 24px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .section h2 {
+            color: #2e318f;
+            margin: 0 0 20px 0;
+            font-size: 1.5rem;
+        }
+
+        .role-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .role-card {
+            background: #f8f9fa;
+            border: 2px solid #e0e6ff;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .role-card:hover {
+            border-color: #2e318f;
+            transform: translateY(-2px);
+        }
+
+        .role-card.selected {
+            background: #e8ecff;
+            border-color: #2e318f;
+        }
+
+        .role-card .icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .role-card h3 {
+            margin: 0 0 10px 0;
+            color: #2e318f;
+        }
+
+        .role-card p {
+            margin: 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .team-form {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .form-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 20px;
+            border: 2px solid #e0e6ff;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: #2e318f;
+            box-shadow: 0 0 0 3px rgba(46, 49, 143, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #2e318f;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e225c;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .team-info {
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .team-info h3 {
+            color: #155724;
+            margin: 0 0 10px 0;
+        }
+
+        .team-code {
+            background: #fff;
+            border: 2px dashed #28a745;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .team-code .code {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2e318f;
+            font-family: monospace;
+        }
+
+        .member-list {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .member-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .member-item:last-child {
+            border-bottom: none;
+        }
+
+        .member-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .member-avatar {
+            width: 40px;
+            height: 40px;
+            background: #2e318f;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .role-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .role-coach { background: #dc3545; color: white; }
+        .role-player { background: #007bff; color: white; }
+        .role-manager { background: #28a745; color: white; }
+
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .team-form {
+                flex-direction: column;
+            }
+            
+            .form-input {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-btn">← ホームに戻る</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🏀 チーム管理</h1>
+            <p>バスケットボールチームのメンバー管理</p>
+        </div>
+
+        <!-- ログイン促進 -->
+        <div id="loginPrompt" class="section" style="display: none;">
+            <h2>ログインが必要です</h2>
+            <p>チーム管理機能を使用するにはGoogleアカウントでログインしてください。</p>
+            <button id="loginBtn" class="btn btn-primary">Googleでログイン</button>
+        </div>
+
+        <!-- チーム作成/参加セクション -->
+        <div id="teamSetup" class="section">
+            <h2>チームへの参加</h2>
+            
+            <!-- 役割選択 -->
+            <h3>あなたの役割を選択してください</h3>
+            <div class="role-selector">
+                <div class="role-card" data-role="coach">
+                    <div class="icon">👨‍💼</div>
+                    <h3>コーチ</h3>
+                    <p>全権限・チーム作成</p>
+                </div>
+                <div class="role-card" data-role="player">
+                    <div class="icon">🏀</div>
+                    <h3>選手</h3>
+                    <p>閲覧・動画アップロード</p>
+                </div>
+                <div class="role-card" data-role="manager">
+                    <div class="icon">📋</div>
+                    <h3>マネージャー</h3>
+                    <p>閲覧・データ管理</p>
+                </div>
+            </div>
+
+            <!-- チーム作成 -->
+            <div id="createTeamSection">
+                <h3>新しいチームを作成</h3>
+                <div class="team-form">
+                    <input type="text" id="teamNameInput" class="form-input" placeholder="チーム名を入力">
+                    <button id="createTeamBtn" class="btn btn-primary">チーム作成</button>
+                </div>
+            </div>
+
+            <!-- チーム参加 -->
+            <div>
+                <h3>既存のチームに参加</h3>
+                <div class="team-form">
+                    <input type="text" id="teamCodeInput" class="form-input" placeholder="チームコードを入力">
+                    <button id="joinTeamBtn" class="btn btn-success">チーム参加</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- チーム情報セクション -->
+        <div id="teamInfo" class="section" style="display: none;">
+            <h2>チーム情報</h2>
+            <div class="team-info">
+                <h3 id="currentTeamName">チーム名</h3>
+                <p>メンバーを招待するには、以下のチームコードを共有してください</p>
+                <div class="team-code">
+                    <div>チームコード</div>
+                    <div class="code" id="currentTeamCode">XXXXXX</div>
+                </div>
+                <div style="text-align: center;">
+                    <button id="copyCodeBtn" class="btn btn-primary">コードをコピー</button>
+                    <button id="leaveTeamBtn" class="btn" style="background: #dc3545; color: white;">チームを退出</button>
+                </div>
+            </div>
+
+            <!-- メンバー一覧 -->
+            <h3>チームメンバー</h3>
+            <div id="memberList" class="member-list">
+                <!-- JavaScript で動的に生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="team-management.js"></script>
+</body>
+</html>

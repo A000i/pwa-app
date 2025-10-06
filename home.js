@@ -45,15 +45,51 @@ auth.onAuthStateChanged((user) => {
     } がログイン中です。`;
     loginBtn.style.display = "none";
     logoutBtn.style.display = "inline-block";
-    loadPeopleList();
+    
+    // 選手作成セクションを表示
+    document.querySelector('.create-section').style.display = 'block';
   } else {
     console.log("ユーザーはログアウト状態です");
-    loginInfo.textContent = "未ログイン";
+    loginInfo.textContent = "未ログイン（閲覧のみ）";
     loginBtn.style.display = "inline-block";
     logoutBtn.style.display = "none";
-    showEmptyState();
+    
+    // 選手作成セクションを非表示
+    document.querySelector('.create-section').style.display = 'none';
   }
+  
+  // ログイン状態に関係なく選手一覧を読み込み
+  loadPeopleList();
 });
+
+// 既存データを共有データに変換
+async function convertExistingDataToShared() {
+  try {
+    console.log("既存データの共有化を開始...");
+    
+    const snapshot = await db.collection("people").get();
+    const batch = db.batch();
+    let updateCount = 0;
+    
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (!data.sharedData) {
+        const docRef = db.collection("people").doc(doc.id);
+        batch.update(docRef, { sharedData: true });
+        updateCount++;
+      }
+    });
+    
+    if (updateCount > 0) {
+      await batch.commit();
+      console.log(`${updateCount}件のデータを共有データに変換しました`);
+    } else {
+      console.log("すべてのデータは既に共有データです");
+    }
+  } catch (error) {
+    console.error("データ変換エラー:", error);
+  }
+}
 
 // ログインボタンのイベント
 document.getElementById("loginBtn").addEventListener("click", async () => {
@@ -112,9 +148,10 @@ async function createPerson() {
     const personData = {
       name: name,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      createdBy: auth.currentUser.uid,
       videoCount: 0,
       analysisCount: 0,
+      // シンプルに共有データとしてマーク
+      shared: true,
     };
 
     console.log("保存するデータ:", personData);
@@ -146,29 +183,17 @@ async function createPerson() {
 async function loadPeopleList() {
   console.log("loadPeopleList関数が呼ばれました");
 
-  if (!auth.currentUser) {
-    console.log("ユーザーがログインしていないため、空の状態を表示します");
-    showEmptyState();
-    return;
-  }
-
-  console.log("ログイン中のユーザー:", auth.currentUser.uid);
-
   try {
     console.log("Firestoreから選手一覧を取得中...");
 
-    // まずはシンプルなクエリを試してみる
-    const querySnapshot = await db
-      .collection("people")
-      .where("createdBy", "==", auth.currentUser.uid)
-      .get();
-
+    // シンプルに全ての選手データを取得（フィルターなし）
+    const querySnapshot = await db.collection("people").get();
     console.log("取得した選手数:", querySnapshot.size);
 
     const peopleGrid = document.getElementById("peopleGrid");
     const emptyState = document.getElementById("emptyState");
 
-    if (querySnapshot.empty) {
+    if (querySnapshot.empty || querySnapshot.size === 0) {
       console.log("選手が見つかりませんでした");
       showEmptyState();
       return;
@@ -216,6 +241,13 @@ function createPersonCard(personId, person) {
   // アバターの初期文字（名前の最初の文字）
   const avatarText = person.name.charAt(0).toUpperCase();
 
+  // ログイン状態に応じて削除ボタンの表示を決定
+  const deleteButton = auth.currentUser 
+    ? `<button class="action-btn delete-btn" onclick="deletePerson('${personId}', '${person.name}')">
+        削除
+      </button>`
+    : '';
+
   card.innerHTML = `
     <div class="person-avatar">${avatarText}</div>
     <div class="person-name">${person.name}</div>
@@ -223,18 +255,27 @@ function createPersonCard(personId, person) {
       動画: ${person.videoCount || 0}本
     </div>
     <div class="person-actions">
-      <button class="action-btn enter-btn" onclick="enterPersonPage('${personId}', '${
-    person.name
-  }')">
+      <button class="action-btn enter-btn" onclick="enterPersonPage('${personId}', '${person.name}')">
         入る
       </button>
-      <button class="action-btn delete-btn" onclick="deletePerson('${personId}', '${
-    person.name
-  }')">
-        削除
+      ${deleteButton}
+    </div>
+    <div class="person-analysis" style="margin-top: 15px;">
+      <button class="action-btn analysis-graph-btn" onclick="viewPersonAnalysis('${personId}', '${person.name}')">
+        📊 骨格推定結果
       </button>
     </div>
   `;
+
+  // デバッグ用のクリックイベントも追加
+  const analysisBtn = card.querySelector('.analysis-graph-btn');
+  if (analysisBtn) {
+    analysisBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      console.log('Analysis button clicked:', personId, person.name);
+      viewPersonAnalysis(personId, person.name);
+    });
+  }
 
   return card;
 }
@@ -313,6 +354,71 @@ function showEmptyState() {
 }
 
 // ページ読み込み時の初期化
+// 選手別骨格推定結果を表示
+function viewPersonAnalysis(personId, personName) {
+  console.log("viewPersonAnalysis called:", personId, personName);
+  
+  // 選手情報をlocalStorageに保存
+  localStorage.setItem(
+    "selectedPersonForAnalysis",
+    JSON.stringify({
+      id: personId,
+      name: personName,
+    })
+  );
+
+  // 選手別骨格推定結果ページに遷移
+  window.location.href = `summary-graph.html?personId=${personId}&personName=${encodeURIComponent(personName)}`;
+}
+
+// テストデータ作成関数（データが削除された場合の復旧用）
+async function createTestData() {
+  try {
+    console.log("テストデータを作成中...");
+    
+    const testPlayers = [
+      { name: "田中選手", videoCount: 3 },
+      { name: "佐藤選手", videoCount: 2 },
+      { name: "山田選手", videoCount: 1 }
+    ];
+    
+    for (const player of testPlayers) {
+      const personData = {
+        name: player.name,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        videoCount: player.videoCount,
+        analysisCount: 0,
+        shared: true,
+      };
+      
+      await db.collection("people").add(personData);
+      console.log(`${player.name}を作成しました`);
+    }
+    
+    alert("テストデータを作成しました！\nページを更新してください。");
+    window.location.reload();
+    
+  } catch (error) {
+    console.error("テストデータ作成エラー:", error);
+    alert("テストデータの作成に失敗しました");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   console.log("ホームページが読み込まれました");
+  
+  // データが空の場合、自動的にテストデータを作成するかユーザーに確認
+  setTimeout(async () => {
+    try {
+      const snapshot = await db.collection("people").get();
+      if (snapshot.empty) {
+        const createTest = confirm("選手データがありません。\nテスト用の選手データを作成しますか？");
+        if (createTest) {
+          await createTestData();
+        }
+      }
+    } catch (error) {
+      console.error("データ確認エラー:", error);
+    }
+  }, 2000); // 2秒後にチェック
 });
