@@ -1,7 +1,7 @@
 {
   "name": "コメントテストアプリ",
   "short_name": "コメント",
-  "start_url": "./home.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2196f3",
