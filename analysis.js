@@ -1334,69 +1334,77 @@ function generateEvaluation() {
     if (window.currentPose.aiMetrics) {
       const m = window.currentPose.aiMetrics;
       const mapScore = (v) => Math.round((v || 0) * 4) + 1; // 0->1, 1->5
+
+      // スコアを評価に変換する関数
+      const scoreToEvaluation = (score) => {
+        if (score >= 5) return { rating: "優秀", class: "excellent" };
+        if (score >= 4) return { rating: "良好", class: "good" };
+        if (score >= 3) return { rating: "普通", class: "normal" };
+        return { rating: "要改善", class: "poor" };
+      };
+
       evaluations = [
         {
           part: "重心バランス",
           score: mapScore(m.balance),
-          rating: "",
-          class: "",
-          detail: "",
+          ...scoreToEvaluation(mapScore(m.balance)),
+          detail: `AI分析スコア: ${mapScore(m.balance)}/5`,
         },
         {
           part: "膝の角度",
           score: mapScore(m.knee),
-          rating: "",
-          class: "",
-          detail: "",
+          ...scoreToEvaluation(mapScore(m.knee)),
+          detail: `AI分析スコア: ${mapScore(m.knee)}/5`,
         },
         {
           part: "背筋の伸び",
           score: mapScore(m.spine),
-          rating: "",
-          class: "",
-          detail: "",
+          ...scoreToEvaluation(mapScore(m.spine)),
+          detail: `AI分析スコア: ${mapScore(m.spine)}/5`,
         },
         {
           part: "足幅",
           score: mapScore(m.stance),
-          rating: "",
-          class: "",
-          detail: "",
+          ...scoreToEvaluation(mapScore(m.stance)),
+          detail: `AI分析スコア: ${mapScore(m.stance)}/5`,
         },
       ];
     } else {
+      // ルールベース分析を使用
+      console.log("ルールベース分析を実行中...");
       evaluations = analyzeBasicPosture(window.currentPose.keypoints);
     }
   } else {
     // デフォルト評価
+    console.log("ポーズデータがないため、デフォルト評価を使用");
     evaluations = [
       {
         part: "重心バランス",
         score: 3,
         rating: "普通",
         class: "normal",
-        detail: "分析中...",
+        detail: "ポーズ検出データが不足しています",
       },
       {
         part: "膝の角度",
         score: 3,
         rating: "普通",
         class: "normal",
-        detail: "分析中...",
+        detail: "ポーズ検出データが不足しています",
       },
       {
         part: "背筋の伸び",
         score: 3,
         rating: "普通",
         class: "normal",
-        detail: "分析中...",
+        detail: "ポーズ検出データが不足しています",
       },
       {
         part: "足幅",
         score: 3,
         rating: "普通",
         class: "normal",
-        detail: "分析中...",
+        detail: "ポーズ検出データが不足しています",
       },
     ];
   }
@@ -1472,11 +1480,16 @@ function analyzeBalance(keypoints) {
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
+    // 信頼度チェックを緩和（0.5 → 0.3）
     if (
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5 &&
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5
+      leftShoulder &&
+      leftShoulder.score > 0.3 &&
+      rightShoulder &&
+      rightShoulder.score > 0.3 &&
+      leftHip &&
+      leftHip.score > 0.3 &&
+      rightHip &&
+      rightHip.score > 0.3
     ) {
       const shoulderCenter = (leftShoulder.x + rightShoulder.x) / 2;
       const hipCenter = (leftHip.x + rightHip.x) / 2;
@@ -1487,28 +1500,28 @@ function analyzeBalance(keypoints) {
           score: 5,
           rating: "優秀",
           class: "excellent",
-          detail: `軸のズレ: ${deviation.toFixed(1)}px`,
+          detail: `重心軸のズレ: ${deviation.toFixed(1)}px (非常に良好)`,
         };
       } else if (deviation < 20) {
         return {
           score: 4,
           rating: "良好",
           class: "good",
-          detail: `軸のズレ: ${deviation.toFixed(1)}px`,
+          detail: `重心軸のズレ: ${deviation.toFixed(1)}px (良好)`,
         };
       } else if (deviation < 30) {
         return {
           score: 3,
           rating: "普通",
           class: "normal",
-          detail: `軸のズレ: ${deviation.toFixed(1)}px`,
+          detail: `重心軸のズレ: ${deviation.toFixed(1)}px (標準的)`,
         };
       } else {
         return {
           score: 2,
           rating: "要改善",
           class: "poor",
-          detail: `軸のズレ: ${deviation.toFixed(1)}px`,
+          detail: `重心軸のズレ: ${deviation.toFixed(1)}px (改善推奨)`,
         };
       }
     }
@@ -1516,7 +1529,12 @@ function analyzeBalance(keypoints) {
     console.error("重心バランス分析エラー:", error);
   }
 
-  return { score: 3, rating: "普通", class: "normal", detail: "分析中..." };
+  return {
+    score: 3,
+    rating: "推定",
+    class: "estimated",
+    detail: "キーポイントの検出精度が低いため推定値で評価",
+  };
 }
 
 // 膝の角度分析
@@ -1526,7 +1544,15 @@ function analyzeKneeAngle(keypoints) {
     const leftKnee = keypoints[13];
     const leftAnkle = keypoints[15];
 
-    if (leftHip.score > 0.5 && leftKnee.score > 0.5 && leftAnkle.score > 0.5) {
+    // 信頼度チェックを緩和（0.5 → 0.3）
+    if (
+      leftHip &&
+      leftHip.score > 0.3 &&
+      leftKnee &&
+      leftKnee.score > 0.3 &&
+      leftAnkle &&
+      leftAnkle.score > 0.3
+    ) {
       const angle = calculateAngle(leftHip, leftKnee, leftAnkle);
 
       if (angle >= 140 && angle <= 160) {
@@ -1534,28 +1560,28 @@ function analyzeKneeAngle(keypoints) {
           score: 5,
           rating: "優秀",
           class: "excellent",
-          detail: `膝の角度: ${angle.toFixed(1)}°`,
+          detail: `膝の角度: ${angle.toFixed(1)}° (理想的な角度)`,
         };
       } else if (angle >= 120 && angle <= 170) {
         return {
           score: 4,
           rating: "良好",
           class: "good",
-          detail: `膝の角度: ${angle.toFixed(1)}°`,
+          detail: `膝の角度: ${angle.toFixed(1)}° (良好な角度)`,
         };
       } else if (angle >= 100 && angle <= 180) {
         return {
           score: 3,
           rating: "普通",
           class: "normal",
-          detail: `膝の角度: ${angle.toFixed(1)}°`,
+          detail: `膝の角度: ${angle.toFixed(1)}° (標準的な角度)`,
         };
       } else {
         return {
           score: 2,
           rating: "要改善",
           class: "poor",
-          detail: `膝の角度: ${angle.toFixed(1)}°`,
+          detail: `膝の角度: ${angle.toFixed(1)}° (改善推奨)`,
         };
       }
     }
@@ -1563,7 +1589,12 @@ function analyzeKneeAngle(keypoints) {
     console.error("膝角度分析エラー:", error);
   }
 
-  return { score: 3, rating: "普通", class: "normal", detail: "分析中..." };
+  return {
+    score: 3,
+    rating: "推定",
+    class: "estimated",
+    detail: "キーポイントの検出精度が低いため推定値で評価",
+  };
 }
 
 // 背筋の伸び分析
@@ -1575,12 +1606,18 @@ function analyzeSpineAlignment(keypoints) {
     const leftHip = keypoints[11];
     const rightHip = keypoints[12];
 
+    // 信頼度チェックを緩和（0.5 → 0.3）
     if (
-      nose.score > 0.5 &&
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5 &&
-      leftHip.score > 0.5 &&
-      rightHip.score > 0.5
+      nose &&
+      nose.score > 0.3 &&
+      leftShoulder &&
+      leftShoulder.score > 0.3 &&
+      rightShoulder &&
+      rightShoulder.score > 0.3 &&
+      leftHip &&
+      leftHip.score > 0.3 &&
+      rightHip &&
+      rightHip.score > 0.3
     ) {
       const shoulderCenter = {
         x: (leftShoulder.x + rightShoulder.x) / 2,
@@ -1605,28 +1642,28 @@ function analyzeSpineAlignment(keypoints) {
           score: 5,
           rating: "優秀",
           class: "excellent",
-          detail: `背筋の傾き: ${deviation.toFixed(1)}°`,
+          detail: `背筋の傾き: ${deviation.toFixed(1)}° (理想的な姿勢)`,
         };
       } else if (deviation < 10) {
         return {
           score: 4,
           rating: "良好",
           class: "good",
-          detail: `背筋の傾き: ${deviation.toFixed(1)}°`,
+          detail: `背筋の傾き: ${deviation.toFixed(1)}° (良好な姿勢)`,
         };
       } else if (deviation < 15) {
         return {
           score: 3,
           rating: "普通",
           class: "normal",
-          detail: `背筋の傾き: ${deviation.toFixed(1)}°`,
+          detail: `背筋の傾き: ${deviation.toFixed(1)}° (標準的な姿勢)`,
         };
       } else {
         return {
           score: 2,
           rating: "要改善",
           class: "poor",
-          detail: `背筋の傾き: ${deviation.toFixed(1)}°`,
+          detail: `背筋の傾き: ${deviation.toFixed(1)}° (改善推奨)`,
         };
       }
     }
@@ -1634,7 +1671,12 @@ function analyzeSpineAlignment(keypoints) {
     console.error("背筋分析エラー:", error);
   }
 
-  return { score: 3, rating: "普通", class: "normal", detail: "分析中..." };
+  return {
+    score: 3,
+    rating: "推定",
+    class: "estimated",
+    detail: "キーポイントの検出精度が低いため推定値で評価",
+  };
 }
 
 // 足幅分析
@@ -1645,11 +1687,16 @@ function analyzeStanceWidth(keypoints) {
     const leftShoulder = keypoints[5];
     const rightShoulder = keypoints[6];
 
+    // 信頼度チェックを緩和（0.5 → 0.3）
     if (
-      leftAnkle.score > 0.5 &&
-      rightAnkle.score > 0.5 &&
-      leftShoulder.score > 0.5 &&
-      rightShoulder.score > 0.5
+      leftAnkle &&
+      leftAnkle.score > 0.3 &&
+      rightAnkle &&
+      rightAnkle.score > 0.3 &&
+      leftShoulder &&
+      leftShoulder.score > 0.3 &&
+      rightShoulder &&
+      rightShoulder.score > 0.3
     ) {
       const ankleWidth = Math.abs(leftAnkle.x - rightAnkle.x);
       const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
@@ -1660,28 +1707,28 @@ function analyzeStanceWidth(keypoints) {
           score: 5,
           rating: "優秀",
           class: "excellent",
-          detail: `足幅/肩幅比: ${ratio.toFixed(2)}`,
+          detail: `足幅/肩幅比: ${ratio.toFixed(2)} (理想的なスタンス)`,
         };
       } else if (ratio >= 0.6 && ratio <= 1.4) {
         return {
           score: 4,
           rating: "良好",
           class: "good",
-          detail: `足幅/肩幅比: ${ratio.toFixed(2)}`,
+          detail: `足幅/肩幅比: ${ratio.toFixed(2)} (良好なスタンス)`,
         };
       } else if (ratio >= 0.4 && ratio <= 1.6) {
         return {
           score: 3,
           rating: "普通",
           class: "normal",
-          detail: `足幅/肩幅比: ${ratio.toFixed(2)}`,
+          detail: `足幅/肩幅比: ${ratio.toFixed(2)} (標準的なスタンス)`,
         };
       } else {
         return {
           score: 2,
           rating: "要改善",
           class: "poor",
-          detail: `足幅/肩幅比: ${ratio.toFixed(2)}`,
+          detail: `足幅/肩幅比: ${ratio.toFixed(2)} (改善推奨)`,
         };
       }
     }
@@ -1689,7 +1736,12 @@ function analyzeStanceWidth(keypoints) {
     console.error("足幅分析エラー:", error);
   }
 
-  return { score: 3, rating: "普通", class: "normal", detail: "分析中..." };
+  return {
+    score: 3,
+    rating: "推定",
+    class: "estimated",
+    detail: "キーポイントの検出精度が低いため推定値で評価",
+  };
 }
 
 // 角度計算関数
