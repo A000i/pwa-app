@@ -1,0 +1,124 @@
+{
+  "format": "graph-model",
+  "generatedBy": "1.15.0",
+  "convertedBy": "TensorFlow.js Converter v1.7.0",
+  "signature": {
+    "inputs": {
+      "input": {
+        "name": "serving_default_input:0",
+        "dtype": "DT_INT32",
+        "tensorShape": {
+          "dim": [
+            { "size": "1" },
+            { "size": "192" },
+            { "size": "192" },
+            { "size": "3" }
+          ]
+        }
+      }
+    },
+    "outputs": {
+      "output_0": {
+        "name": "StatefulPartitionedCall:0",
+        "dtype": "DT_FLOAT",
+        "tensorShape": {
+          "dim": [
+            { "size": "1" },
+            { "size": "1" },
+            { "size": "17" },
+            { "size": "3" }
+          ]
+        }
+      }
+    }
+  },
+  "modelTopology": {
+    "node": [
+      {
+        "name": "serving_default_input",
+        "op": "Placeholder",
+        "attr": {
+          "dtype": { "type": "DT_INT32" },
+          "shape": {
+            "shape": {
+              "dim": [
+                { "size": "1" },
+                { "size": "192" },
+                { "size": "192" },
+                { "size": "3" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "name": "Cast",
+        "op": "Cast",
+        "input": ["serving_default_input"],
+        "attr": {
+          "SrcT": { "type": "DT_INT32" },
+          "DstT": { "type": "DT_FLOAT" }
+        }
+      },
+      {
+        "name": "StatefulPartitionedCall",
+        "op": "StatefulPartitionedCall",
+        "input": ["Cast"],
+        "attr": {
+          "Tin": { "list": { "type": ["DT_FLOAT"] } },
+          "Tout": { "list": { "type": ["DT_FLOAT"] } },
+          "f": { "func": { "name": "inference_fn" } }
+        }
+      }
+    ],
+    "library": {
+      "function": [
+        {
+          "signature": {
+            "name": "inference_fn",
+            "input_arg": [
+              {
+                "name": "input_tensor",
+                "type": "DT_FLOAT"
+              }
+            ],
+            "output_arg": [
+              {
+                "name": "output_tensor",
+                "type": "DT_FLOAT"
+              }
+            ]
+          },
+          "node_def": [
+            {
+              "name": "Identity",
+              "op": "Identity",
+              "input": ["input_tensor"],
+              "attr": {
+                "T": { "type": "DT_FLOAT" }
+              }
+            }
+          ],
+          "ret": {
+            "output_tensor": "Identity:output:0"
+          }
+        }
+      ]
+    },
+    "versions": {
+      "producer": 27
+    }
+  },
+  "weightsManifest": [
+    {
+      "paths": ["group1-shard1of1.bin"],
+      "weights": [
+        {
+          "name": "dummy_weight",
+          "shape": [17, 3],
+          "dtype": "float32"
+        }
+      ]
+    }
+  ]
+}
