@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
     <link rel="manifest" href="manifest.json" />
@@ -138,15 +139,20 @@
       #videoPlayer {
         width: 100%;
         max-width: 640px;
+        height: 360px; /* 16:9のアスペクト比で固定 */
         border-radius: 12px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
         margin-bottom: 16px;
+        object-fit: contain; /* 動画全体が枠内に収まるように変更 */
+        background: #000; /* 統一感のある背景 */
       }
       #poseCanvas {
         width: 100%;
         max-width: 640px;
+        height: 360px; /* 動画と同じサイズに統一 */
         border-radius: 12px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        background: #000; /* 統一感のある背景 */
       }
       .comment-area {
         flex: 1;
@@ -343,6 +349,13 @@
         <div class="login-info-inline">
           <span id="loginInfo">未ログイン</span>
           <button id="loginBtn" class="login-btn-inline">ログイン</button>
+          <button
+            id="switchAccountBtn"
+            class="login-btn-inline"
+            style="display: none"
+          >
+            アカウント切り替え
+          </button>
           <button id="logoutBtn" class="logout-btn-inline">ログアウト</button>
         </div>
         <!-- ナビゲーションボタン -->
@@ -388,15 +401,16 @@
         <video
           id="videoPlayer"
           width="640"
+          height="360"
           controls
-          style="display: none"
+          style="display: none; object-fit: contain"
         ></video>
 
         <!-- 骨格推定キャンバス -->
         <canvas
           id="poseCanvas"
           width="640"
-          height="480"
+          height="360"
           style="border: 1px solid #ccc; display: none"
         ></canvas>
 
@@ -406,13 +420,74 @@
 
       <div class="column comment-area">
         <h2>コメント</h2>
-        <input
-          type="text"
-          id="commentInput"
-          placeholder="コメントを入力（例: 1:23 良いフォーム）"
-          disabled
-        />
-        <button id="sendComment" disabled>送信</button>
+        <div
+          class="comment-input-container"
+          style="
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+          "
+        >
+          <input
+            type="text"
+            id="commentInput"
+            placeholder="コメントを入力（例: 1:23 良いフォーム）"
+            disabled
+            style="
+              flex: 1;
+              padding: 8px;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+            "
+          />
+          <button
+            id="voiceInputBtn"
+            disabled
+            style="
+              padding: 8px 12px;
+              background: #ff6b6b;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+            "
+            title="音声入力"
+          >
+            🎤 音声
+          </button>
+          <button
+            id="sendComment"
+            disabled
+            style="
+              padding: 8px 15px;
+              background: #2e318f;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+            "
+          >
+            送信
+          </button>
+        </div>
+        <div
+          id="voiceStatus"
+          style="
+            display: none;
+            padding: 8px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #2e7d32;
+          "
+        >
+          🎤 音声認識中... 話してください
+        </div>
         <div style="max-height: 400px; overflow-y: auto">
           <ul id="commentList"></ul>
         </div>

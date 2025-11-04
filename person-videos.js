@@ -55,6 +55,7 @@ if (!currentPerson) {
 auth.onAuthStateChanged((user) => {
   const loginInfo = document.getElementById("loginInfo");
   const loginBtn = document.getElementById("loginBtn");
+  const switchAccountBtn = document.getElementById("switchAccountBtn");
   const logoutBtn = document.getElementById("logoutBtn");
 
   if (user) {
@@ -63,6 +64,7 @@ auth.onAuthStateChanged((user) => {
       user.displayName || user.email
     } がログイン中です。`;
     loginBtn.style.display = "none";
+    switchAccountBtn.style.display = "inline-block";
     logoutBtn.style.display = "inline-block";
 
     // 選手名を表示
@@ -73,6 +75,7 @@ auth.onAuthStateChanged((user) => {
     currentUser = null;
     loginInfo.textContent = "未ログイン";
     loginBtn.style.display = "inline-block";
+    switchAccountBtn.style.display = "none";
     logoutBtn.style.display = "none";
     showEmptyState();
   }
@@ -81,11 +84,33 @@ auth.onAuthStateChanged((user) => {
 // ログインボタンのイベント
 document.getElementById("loginBtn").addEventListener("click", async () => {
   const provider = new firebase.auth.GoogleAuthProvider();
+  // アカウント選択を強制
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
   try {
     await auth.signInWithPopup(provider);
   } catch (error) {
     console.error("ログインエラー:", error);
     alert("ログインに失敗しました");
+  }
+});
+
+// アカウント切り替えボタンのイベント
+document.getElementById("switchAccountBtn").addEventListener("click", async () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  // 強制的にアカウント選択画面を表示
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
+  
+  try {
+    // 現在のセッションを一旦終了してから新しいアカウントでログイン
+    await auth.signOut();
+    await auth.signInWithPopup(provider);
+  } catch (error) {
+    console.error("アカウント切り替えエラー:", error);
+    alert("アカウント切り替えに失敗しました");
   }
 });
 

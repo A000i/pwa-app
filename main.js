@@ -89,6 +89,7 @@ const list = document.getElementById("commentList");
 
 // GoogleログインUI（home.html側のloginAreaを利用）
 const loginBtn = document.getElementById("loginBtn");
+const switchAccountBtn = document.getElementById("switchAccountBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const loginInfo = document.getElementById("loginInfo");
 let currentUser = null;
@@ -101,7 +102,29 @@ if (input) input.disabled = true;
 if (loginBtn) {
   loginBtn.addEventListener("click", () => {
     const provider = new firebase.auth.GoogleAuthProvider();
+    // アカウント選択を強制
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
     auth.signInWithPopup(provider);
+  });
+}
+
+if (switchAccountBtn) {
+  switchAccountBtn.addEventListener("click", async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    // 強制的にアカウント選択画面を表示
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    try {
+      // 現在のセッションを一旦終了してから新しいアカウントでログイン
+      await auth.signOut();
+      await auth.signInWithPopup(provider);
+    } catch (error) {
+      console.error("アカウント切り替えエラー:", error);
+    }
   });
 }
 
@@ -115,14 +138,16 @@ auth.onAuthStateChanged((user) => {
   if (user) {
     currentUser = user;
     if (loginBtn) loginBtn.style.display = "none";
-    if (logoutBtn) logoutBtn.style.display = "";
+    if (switchAccountBtn) switchAccountBtn.style.display = "inline-block";
+    if (logoutBtn) logoutBtn.style.display = "inline-block";
     if (loginInfo)
       loginInfo.textContent = `${user.displayName} がログイン中です。`;
     if (sendBtn) sendBtn.disabled = false;
     if (input) input.disabled = false;
   } else {
     currentUser = null;
-    if (loginBtn) loginBtn.style.display = "";
+    if (loginBtn) loginBtn.style.display = "inline-block";
+    if (switchAccountBtn) switchAccountBtn.style.display = "none";
     if (logoutBtn) logoutBtn.style.display = "none";
     if (loginInfo) loginInfo.textContent = "未ログイン";
     if (sendBtn) sendBtn.disabled = true;

@@ -426,7 +426,8 @@ async function fetchAndMergePersonVideos(personId) {
           analysis.metrics &&
           typeof analysis.metrics[key] !== "undefined"
         ) {
-          return analysis.metrics[key];
+          const val = parseFloat(analysis.metrics[key]);
+          return !isNaN(val) ? val : null;
         }
         // if overall requested from metrics
         if (
@@ -435,62 +436,93 @@ async function fetchAndMergePersonVideos(personId) {
           typeof analysis.metrics.overall !== "undefined" &&
           key === "overall"
         ) {
-          return analysis.metrics.overall;
+          const val = parseFloat(analysis.metrics.overall);
+          return !isNaN(val) ? val : null;
         }
         // fallback compute from pose if available
         if (analysis && analysis.pose) {
           const m = computeMetricsFromPose(analysis.pose);
-          return m[key];
+          const val = m[key];
+          return val !== null && val !== undefined && !isNaN(val)
+            ? parseFloat(val)
+            : null;
         }
         return null;
       }
 
-      // push per metric
+      // Get all metric values and check if we have at least some valid data
+      const balanceVal = valueFor("balance");
+      const kneeVal = valueFor("knee");
+      const spineVal = valueFor("spine");
+      const stanceVal = valueFor("stance");
+      const shootFormVal = valueFor("shootForm");
+      const defenseVal = valueFor("defense");
+      const dribbleVal = valueFor("dribble");
+      const stabilityVal = valueFor("stability");
+
+      // Skip this data point if ALL values are null (no analysis available)
+      const hasAnyData = [
+        balanceVal,
+        kneeVal,
+        spineVal,
+        stanceVal,
+        shootFormVal,
+        defenseVal,
+        dribbleVal,
+        stabilityVal,
+      ].some((val) => val !== null && val !== undefined && !isNaN(val));
+
+      if (!hasAnyData) {
+        console.warn(`動画 ${filename} のデータが不完全です - スキップします`);
+        return; // Skip this video entirely
+      }
+
+      // push per metric (with fallback values for missing data)
       metrics.balance.push({
         date: dateLabel,
-        value: valueFor("balance"),
+        value: balanceVal || 3.0, // デフォルト値でnullを回避
         videoId: id,
         filename,
       });
       metrics.knee.push({
         date: dateLabel,
-        value: valueFor("knee"),
+        value: kneeVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.spine.push({
         date: dateLabel,
-        value: valueFor("spine"),
+        value: spineVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.stance.push({
         date: dateLabel,
-        value: valueFor("stance"),
+        value: stanceVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.shootForm.push({
         date: dateLabel,
-        value: valueFor("shootForm"),
+        value: shootFormVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.defense.push({
         date: dateLabel,
-        value: valueFor("defense"),
+        value: defenseVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.dribble.push({
         date: dateLabel,
-        value: valueFor("dribble"),
+        value: dribbleVal || 3.0,
         videoId: id,
         filename,
       });
       metrics.stability.push({
         date: dateLabel,
-        value: valueFor("stability"),
+        value: stabilityVal || 3.0,
         videoId: id,
         filename,
       });
@@ -928,21 +960,48 @@ function updateChart() {
   // データの準備
   const data = getFilteredData();
 
+  console.log(`📊 グラフ更新: ${data?.length || 0}件のデータポイント`);
+
   if (!data || data.length === 0) {
     // データがない場合の表示
+    console.warn("📊 グラフに表示するデータがありません");
     showNoDataMessage();
     return;
+  }
+
+  // データの有効性を再確認
+  const validPoints = data.filter(
+    (item) =>
+      item &&
+      item.value !== null &&
+      item.value !== undefined &&
+      !isNaN(item.value) &&
+      item.date
+  );
+
+  if (validPoints.length === 0) {
+    console.warn("📊 有効なデータポイントがありません");
+    showNoDataMessage();
+    return;
+  }
+
+  if (validPoints.length !== data.length) {
+    console.warn(
+      `📊 ${
+        data.length - validPoints.length
+      }件の無効なデータポイントを除外しました`
+    );
   }
 
   // グラフの設定
   const config = {
     type: "line",
     data: {
-      labels: data.map((item) => item.date),
+      labels: validPoints.map((item) => item.date),
       datasets: [
         {
           label: metricNames[currentMetric],
-          data: data.map((item) => item.value),
+          data: validPoints.map((item) => item.value),
           borderColor: "#2e318f",
           backgroundColor: "rgba(46, 49, 143, 0.1)",
           pointBackgroundColor: "#2e318f",
@@ -1012,7 +1071,7 @@ function updateChart() {
         if (now - this.lastClick < 300 && elements.length > 0) {
           // ダブルクリック
           const dataIndex = elements[0].index;
-          const clickedData = data[dataIndex];
+          const clickedData = validPoints[dataIndex];
           handleChartDoubleClick(clickedData);
         } else if (elements.length > 0) {
           // シングルクリック - データポイントの詳細表示
@@ -1152,6 +1211,27 @@ function getFilteredData() {
     return copy;
   });
 
+  // null値や無効な値を持つデータポイントをフィルタリング
+  const validData = data.filter((dp) => {
+    return (
+      dp &&
+      dp.value !== null &&
+      dp.value !== undefined &&
+      !isNaN(dp.value) &&
+      dp.date
+    );
+  });
+
+  console.log(
+    `🔍 データフィルタリング結果: ${data.length}件 → ${validData.length}件の有効データ`
+  );
+  if (validData.length !== data.length) {
+    console.warn(
+      "無効なデータポイントが除外されました:",
+      data.filter((dp) => !validData.includes(dp))
+    );
+  }
+
   // 期間に応じてデータをフィルタリング（現状: フォールバックで全件返す実装を保持）
   const now = new Date();
   let startDate;
@@ -1176,21 +1256,21 @@ function getFilteredData() {
   // タイル (入力) が存在する場合、既存の挙動を維持して最新点を上書きする（最優先）
   try {
     const el = document.getElementById(`${currentMetric}Value`);
-    if (el && data && data.length > 0) {
+    if (el && validData && validData.length > 0) {
       const v = parseFloat(
         el.querySelector && el.querySelector(".value-display")
           ? el.querySelector(".value-display").textContent
           : el.textContent
       );
       if (!isNaN(v)) {
-        data[data.length - 1].value = Math.round(v * 10) / 10;
+        validData[validData.length - 1].value = Math.round(v * 10) / 10;
       }
     }
   } catch (e) {
     console.warn("getFilteredData tile override failed:", e);
   }
 
-  return data;
+  return validData;
 }
 
 // データなしメッセージの表示

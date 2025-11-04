@@ -5,11 +5,17 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>動画解析結果</title>
-    
+
     <!-- TensorFlow.jsとPose Detection - より安定したバージョンを使用 -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js" crossorigin="anonymous"></script>
-    
+    <script
+      src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js"
+      crossorigin="anonymous"
+    ></script>
+
     <!-- Firebase SDK追加（ストレージアクセス用） -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
@@ -61,9 +67,19 @@
         align-items: center;
         gap: 16px;
       }
+
+      #originalVideoContainer {
+        width: 100%;
+        max-width: 300px;
+        height: 225px;
+        position: relative;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden; /* 動画が枠からはみ出ないようにする */
+      }
       .video-placeholder {
         width: 100%;
-        height: 200px;
+        height: 225px; /* 動画と同じ高さに統一 */
         background: #e0e0e0;
         border-radius: 8px;
         display: flex;
@@ -87,7 +103,10 @@
       .skeleton-video {
         width: 100%;
         max-width: 300px;
+        height: 225px;
         border-radius: 8px;
+        object-fit: contain; /* 動画全体が枠内に収まるように変更 */
+        background: #000; /* 黒い背景で統一感を出す */
       }
       .evaluation-list {
         list-style: none;
@@ -246,7 +265,12 @@
                   id="originalVideo"
                   class="skeleton-video"
                   controls
-                  style="display: none"
+                  style="
+                    display: none;
+                    width: 100%;
+                    height: 225px;
+                    object-fit: contain;
+                  "
                 >
                   <source id="originalVideoSource" type="video/mp4" />
                 </video>
@@ -319,7 +343,7 @@
       };
 
       // Firebase初期化（既に初期化されていない場合のみ）
-      if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+      if (typeof firebase !== "undefined" && !firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
         window.firebaseStorage = firebase.storage();
         console.log("Firebase Storage initialized for analysis page");
@@ -327,5 +351,7 @@
     </script>
 
     <script src="analysis.js"></script>
+    <script src="auto-training-system.js"></script>
+    <script src="real-data-learning.js"></script>
   </body>
 </html>

@@ -27,14 +27,149 @@ const list = document.getElementById("commentList");
 
 // GoogleログインUI
 const loginBtn = document.getElementById("loginBtn");
+const switchAccountBtn = document.getElementById("switchAccountBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const loginInfo = document.getElementById("loginInfo");
 let currentUser = null;
 
 const sendBtn = document.getElementById("sendComment");
 const input = document.getElementById("commentInput");
+const voiceInputBtn = document.getElementById("voiceInputBtn");
+const voiceStatus = document.getElementById("voiceStatus");
 sendBtn.disabled = true;
 input.disabled = true;
+voiceInputBtn.disabled = true;
+
+// 音声認識の設定
+let recognition = null;
+let isRecording = false;
+
+// Web Speech API の初期化
+function initializeSpeechRecognition() {
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+
+    recognition.lang = "ja-JP"; // 日本語に設定
+    recognition.continuous = false; // 一度の認識で終了
+    recognition.interimResults = true; // 途中結果も表示
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function () {
+      isRecording = true;
+      voiceInputBtn.style.background = "#ff4444";
+      voiceInputBtn.innerHTML = "🎤 停止";
+      voiceStatus.style.display = "block";
+      voiceStatus.innerHTML = "🎤 音声認識中... 話してください";
+      console.log("音声認識開始");
+    };
+
+    recognition.onresult = function (event) {
+      let transcript = "";
+      let isFinal = false;
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          isFinal = true;
+        }
+      }
+
+      // 入力フィールドに音声認識結果を追加
+      if (isFinal) {
+        const currentText = input.value;
+        const newText = currentText
+          ? currentText + " " + transcript
+          : transcript;
+        input.value = newText;
+        console.log("音声認識結果（確定）:", transcript);
+      } else {
+        // 暫定結果を表示
+        voiceStatus.innerHTML = `🎤 認識中: "${transcript}"`;
+      }
+    };
+
+    recognition.onerror = function (event) {
+      console.error("音声認識エラー:", event.error);
+      stopVoiceRecognition();
+
+      let errorMessage = "音声認識でエラーが発生しました";
+      switch (event.error) {
+        case "no-speech":
+          errorMessage = "音声が検出されませんでした";
+          break;
+        case "audio-capture":
+          errorMessage = "マイクにアクセスできません";
+          break;
+        case "not-allowed":
+          errorMessage = "マイクの使用が許可されていません";
+          break;
+        case "network":
+          errorMessage = "ネットワークエラーが発生しました";
+          break;
+      }
+
+      voiceStatus.style.display = "block";
+      voiceStatus.style.background = "#ffebee";
+      voiceStatus.style.color = "#c62828";
+      voiceStatus.innerHTML = `❌ ${errorMessage}`;
+
+      setTimeout(() => {
+        voiceStatus.style.display = "none";
+      }, 3000);
+    };
+
+    recognition.onend = function () {
+      stopVoiceRecognition();
+      console.log("音声認識終了");
+    };
+
+    console.log("音声認識機能が利用可能です");
+    return true;
+  } else {
+    console.warn("音声認識機能はこのブラウザでサポートされていません");
+    voiceInputBtn.style.display = "none";
+    return false;
+  }
+}
+
+// 音声認識開始
+function startVoiceRecognition() {
+  if (!recognition) return;
+
+  try {
+    recognition.start();
+  } catch (error) {
+    console.error("音声認識開始エラー:", error);
+  }
+}
+
+// 音声認識停止
+function stopVoiceRecognition() {
+  isRecording = false;
+  voiceInputBtn.style.background = "#ff6b6b";
+  voiceInputBtn.innerHTML = "🎤 音声";
+  voiceStatus.style.display = "none";
+
+  if (recognition) {
+    recognition.stop();
+  }
+}
+
+// 音声入力ボタンのイベントリスナー
+voiceInputBtn.addEventListener("click", function () {
+  if (!currentUser) {
+    alert("ログインしてから音声入力をご利用ください");
+    return;
+  }
+
+  if (isRecording) {
+    stopVoiceRecognition();
+  } else {
+    startVoiceRecognition();
+  }
+});
 
 // URLパラメータと選択された動画情報を取得
 function getCurrentVideoInfo() {
@@ -105,6 +240,9 @@ if (!currentPerson || !selectedVideo.videoId) {
 // ページ初期化
 async function initializePage() {
   await updatePersonAndVideoInfo();
+
+  // 音声認識機能を初期化
+  initializeSpeechRecognition();
 
   // モードに応じてUIを調整
   if (currentMode === "analyze") {
@@ -188,7 +326,29 @@ function goHome() {
 // 認証処理
 loginBtn.addEventListener("click", () => {
   const provider = new firebase.auth.GoogleAuthProvider();
+  // アカウント選択を強制（複数アカウントがある場合）
+  provider.setCustomParameters({
+    prompt: "select_account",
+  });
   auth.signInWithPopup(provider);
+});
+
+// アカウント切り替え機能
+switchAccountBtn.addEventListener("click", () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  // 強制的にアカウント選択画面を表示
+  provider.setCustomParameters({
+    prompt: "select_account",
+  });
+
+  // 現在のセッションを一旦終了してから新しいアカウントでログイン
+  auth.signOut().then(() => {
+    auth.signInWithPopup(provider).catch((error) => {
+      console.error("アカウント切り替えエラー:", error);
+      // エラーが発生した場合は元のユーザー状態に戻る
+      auth.signInWithPopup(provider);
+    });
+  });
 });
 
 logoutBtn.addEventListener("click", () => {
@@ -203,16 +363,20 @@ auth.onAuthStateChanged((user) => {
       user.displayName || user.email
     } がログイン中です。`;
     loginBtn.style.display = "none";
+    switchAccountBtn.style.display = "inline-block";
     logoutBtn.style.display = "inline-block";
     sendBtn.disabled = false;
     input.disabled = false;
+    voiceInputBtn.disabled = false;
   } else {
     currentUser = null;
     loginInfo.textContent = "未ログイン";
     loginBtn.style.display = "inline-block";
+    switchAccountBtn.style.display = "none";
     logoutBtn.style.display = "none";
     sendBtn.disabled = true;
     input.disabled = true;
+    voiceInputBtn.disabled = true;
   }
 });
 
@@ -343,7 +507,14 @@ function formatTimestamp(timestamp) {
     date = new Date(timestamp);
   }
 
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // 日付と時刻を「2025/11/04 10:20」の形式で表示
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
 }
 
 // 動画の指定時間にシーク
