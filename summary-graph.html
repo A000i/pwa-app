@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>骨格推定結果集計 - バスケットボール姿勢分析</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      body {
+        font-family: "Segoe UI", "Meiryo", sans-serif;
+        background: linear-gradient(
+          135deg,
+          #9bb0ff 0%,
+          #8ba5ff 50%,
+          #a5b5ff 100%
+        );
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .header h1 {
+        color: #2e318f;
+        margin: 0;
+        font-size: 2.2rem;
+      }
+
+      .back-btn {
+        padding: 12px 24px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-decoration: none;
+      }
+
+      .back-btn:hover {
+        background: #5a6268;
+        transform: translateY(-2px);
+      }
+
+      .date-display {
+        text-align: center;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 20px;
+        color: #666;
+        font-size: 1.1rem;
+      }
+
+      .selected-person {
+        font-weight: bold;
+        color: #2e318f;
+        font-size: 1.3rem;
+        margin-left: 20px;
+      }
+
+      .graph-container {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        margin-bottom: 20px;
+      }
+
+      .metric-selector {
+        display: flex;
+        margin-bottom: 30px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 5px;
+      }
+
+      .metric-button {
+        flex: 1;
+        padding: 15px 20px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 10px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .metric-button.active {
+        background: #2e318f;
+        color: white;
+      }
+
+      .metric-button:not(.active) {
+        color: #6c757d;
+      }
+
+      .metric-button:hover:not(.active) {
+        background: rgba(46, 49, 143, 0.1);
+      }
+
+      .dropdown-arrow {
+        margin-left: 10px;
+        transition: transform 0.3s ease;
+      }
+
+      .dropdown-arrow.rotated {
+        transform: rotate(180deg);
+      }
+
+      .detailed-metrics {
+        display: none;
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+
+      .detailed-metrics.show {
+        display: block;
+      }
+
+      .detailed-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+
+      .detailed-metric {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+      }
+
+      .detailed-metric:hover {
+        border-color: #2e318f;
+        transform: translateY(-2px);
+      }
+
+      .detailed-metric.active {
+        border-color: #2e318f;
+        background: #e8ecff;
+      }
+
+      .detailed-metric h4 {
+        margin: 0 0 10px 0;
+        color: #2e318f;
+        font-size: 0.9rem;
+      }
+
+      .detailed-metric .value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .chart-wrapper {
+        position: relative;
+        height: 400px;
+        margin-top: 20px;
+      }
+
+      .chart-title {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #2e318f;
+        font-size: 1.3rem;
+        font-weight: bold;
+      }
+
+      .period-selector {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 20px;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 10px;
+      }
+
+      .period-btn {
+        padding: 8px 16px;
+        border: none;
+        background: white;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .period-btn.active {
+        background: #2e318f;
+        color: white;
+      }
+
+      .no-data {
+        text-align: center;
+        color: #6c757d;
+        font-size: 1.1rem;
+        padding: 40px;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 10px;
+        }
+
+        .header {
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        .metric-selector {
+          flex-direction: column;
+        }
+
+        .detailed-grid {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1 id="pageTitle">骨格推定結果集計</h1>
+        <a href="home.html" class="back-btn">← ホームに戻る</a>
+      </div>
+
+      <div class="date-display">
+        <span id="currentDate">2025年10月6日</span>
+        <span id="selectedPerson" class="selected-person"></span>
+      </div>
+
+      <div class="graph-container">
+        <div class="metric-selector">
+          <button class="metric-button active" id="basicPostureBtn">
+            基本姿勢評価
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <button class="metric-button" id="motionEvalBtn">
+            動作別評価
+            <span class="dropdown-arrow">▼</span>
+          </button>
+        </div>
+
+        <!-- 基本姿勢評価の詳細メトリクス -->
+        <div class="detailed-metrics show" id="basicPostureDetails">
+          <div class="detailed-grid">
+            <div class="detailed-metric active" data-metric="balance">
+              <h4>重心バランス</h4>
+              <div class="value" id="balanceValue">
+                <span class="value-display">4.2</span>
+                <input
+                  class="value-input"
+                  id="balanceInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="balance">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="balance"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="balance"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="knee">
+              <h4>膝角度</h4>
+              <div class="value" id="kneeValue">
+                <span class="value-display">3.8</span>
+                <input
+                  class="value-input"
+                  id="kneeInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="knee">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="knee"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="knee"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="spine">
+              <h4>背筋の伸び</h4>
+              <div class="value" id="spineValue">
+                <span class="value-display">4.5</span>
+                <input
+                  class="value-input"
+                  id="spineInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="spine">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="spine"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="spine"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="stance">
+              <h4>足幅</h4>
+              <div class="value" id="stanceValue">
+                <span class="value-display">4.0</span>
+                <input
+                  class="value-input"
+                  id="stanceInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="stance">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="stance"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="stance"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 動作別評価の詳細メトリクス -->
+        <div class="detailed-metrics" id="motionEvalDetails">
+          <div class="detailed-grid">
+            <div class="detailed-metric active" data-metric="shootForm">
+              <h4>シュートフォーム</h4>
+              <div class="value" id="shootFormValue">
+                <span class="value-display">4.1</span>
+                <input
+                  class="value-input"
+                  id="shootFormInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="shootForm">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="shootForm"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="shootForm"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="defense">
+              <h4>ディフェンススタンス</h4>
+              <div class="value" id="defenseValue">
+                <span class="value-display">3.9</span>
+                <input
+                  class="value-input"
+                  id="defenseInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="defense">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="defense"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="defense"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="dribble">
+              <h4>ドリブル姿勢</h4>
+              <div class="value" id="dribbleValue">
+                <span class="value-display">4.3</span>
+                <input
+                  class="value-input"
+                  id="dribbleInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="dribble">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="dribble"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="dribble"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <div class="detailed-metric" data-metric="stability">
+              <h4>重心安定性</h4>
+              <div class="value" id="stabilityValue">
+                <span class="value-display">4.0</span>
+                <input
+                  class="value-input"
+                  id="stabilityInput"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="5"
+                  style="display: none; width: 72px"
+                />
+                <button class="edit-btn" data-metric="stability">編集</button>
+                <button
+                  class="save-btn"
+                  data-metric="stability"
+                  style="display: none"
+                >
+                  保存
+                </button>
+                <button
+                  class="cancel-btn"
+                  data-metric="stability"
+                  style="display: none"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-title" id="chartTitle">重心バランス</div>
+
+        <div class="chart-wrapper">
+          <canvas id="metricsChart"></canvas>
+        </div>
+
+        <div class="period-selector">
+          <button class="period-btn active" data-period="1week">1週間</button>
+          <button class="period-btn" data-period="1month">1ヶ月</button>
+          <button class="period-btn" data-period="3months">3ヶ月</button>
+          <button class="period-btn" data-period="6months">6ヶ月</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="summary-graph.js"></script>
+  </body>
+</html>

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>動画解析結果</title>
+
+    <!-- TensorFlow.jsとPose Detection - より安定したバージョンを使用 -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js"
+      crossorigin="anonymous"
+    ></script>
+
+    <!-- Firebase SDK追加（ストレージアクセス用） -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <style>
+      body {
+        font-family: "Segoe UI", "Meiryo", sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 16px;
+        padding: 32px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      .header h1 {
+        font-size: 2rem;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      .content-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 24px;
+        margin-bottom: 32px;
+      }
+      .section {
+        background: #fafafa;
+        border-radius: 12px;
+        padding: 24px;
+        border: 2px solid #e0e0e0;
+      }
+      .section h2 {
+        font-size: 1.3rem;
+        margin-bottom: 16px;
+        text-align: center;
+        color: #333;
+      }
+      .video-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      #originalVideoContainer {
+        width: 100%;
+        max-width: 300px;
+        height: 225px;
+        position: relative;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden; /* 動画が枠からはみ出ないようにする */
+      }
+      .video-placeholder {
+        width: 100%;
+        height: 225px; /* 動画と同じ高さに統一 */
+        background: #e0e0e0;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #666;
+      }
+      .play-button {
+        width: 60px;
+        height: 60px;
+        background: #2e318f;
+        border: none;
+        border-radius: 50%;
+        color: #fff;
+        font-size: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .skeleton-video {
+        width: 100%;
+        max-width: 300px;
+        height: 225px;
+        border-radius: 8px;
+        object-fit: contain; /* 動画全体が枠内に収まるように変更 */
+        background: #000; /* 黒い背景で統一感を出す */
+      }
+      .evaluation-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .evaluation-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+      }
+      .body-part {
+        font-weight: bold;
+        font-size: 1.1rem;
+      }
+      .score {
+        font-weight: bold;
+        font-size: 1.2rem;
+      }
+      .excellent {
+        color: #4caf50;
+      }
+      .good {
+        color: #8bc34a;
+      }
+      .normal {
+        color: #ffc107;
+      }
+      .poor {
+        color: #ff9800;
+      }
+      .bad {
+        color: #f44336;
+      }
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 32px;
+      }
+      .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      .btn-primary {
+        background: #2e318f;
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #1e225c;
+      }
+      .btn-secondary {
+        background: #6c757d;
+        color: #fff;
+      }
+      .btn-secondary:hover {
+        background: #545b62;
+      }
+      #analysisBtn:hover {
+        background: #1e225c;
+      }
+      .loading {
+        text-align: center;
+        color: #666;
+        font-size: 1.1rem;
+      }
+      @media (max-width: 900px) {
+        .content-grid {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>動画解析結果</h1>
+      </div>
+
+      <div id="loadingSection" class="loading">
+        <p>動画を解析中です...</p>
+        <div
+          id="testMessage"
+          style="
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff3cd;
+            border-radius: 5px;
+            display: none;
+          "
+        >
+          <p>JavaScript読み込み確認中...</p>
+        </div>
+        <div style="margin-top: 20px">
+          <button
+            onclick="showTestResult()"
+            style="
+              padding: 10px 20px;
+              background: #2e318f;
+              color: white;
+              border: none;
+              border-radius: 5px;
+              cursor: pointer;
+              margin-right: 10px;
+            "
+          >
+            テスト表示
+          </button>
+          <button
+            onclick="showDebugInfo()"
+            style="
+              padding: 10px 20px;
+              background: #17a2b8;
+              color: white;
+              border: none;
+              border-radius: 5px;
+              cursor: pointer;
+              margin-right: 10px;
+            "
+          >
+            デバッグ情報
+          </button>
+          <button
+            onclick="goBack()"
+            style="
+              padding: 10px 20px;
+              background: #6c757d;
+              color: white;
+              border: none;
+              border-radius: 5px;
+              cursor: pointer;
+            "
+          >
+            戻る
+          </button>
+        </div>
+      </div>
+      <div id="resultSection" style="display: none">
+        <div class="content-grid">
+          <!-- ①元動画 -->
+          <div class="section">
+            <h2>①元動画</h2>
+            <div class="video-container">
+              <div id="originalVideoContainer">
+                <video
+                  id="originalVideo"
+                  class="skeleton-video"
+                  controls
+                  style="
+                    display: none;
+                    width: 100%;
+                    height: 225px;
+                    object-fit: contain;
+                  "
+                >
+                  <source id="originalVideoSource" type="video/mp4" />
+                </video>
+                <div class="video-placeholder" id="originalPlaceholder">
+                  <button class="play-button">▶</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ②骨格推定動画 -->
+          <div class="section">
+            <h2>②骨格推定動画</h2>
+            <div class="video-container">
+              <canvas
+                id="skeletonCanvas"
+                class="skeleton-video"
+                width="300"
+                height="225"
+              ></canvas>
+              <div id="skeletonPlaceholder" class="video-placeholder">
+                解析中...
+              </div>
+            </div>
+          </div>
+
+          <!-- ③各骨格の評価 -->
+          <div class="section">
+            <h2>③各骨格の評価</h2>
+            <ul class="evaluation-list" id="evaluationList">
+              <li class="evaluation-item">
+                <span class="body-part">頭部</span>
+                <span class="score excellent" id="headScore">5 優秀</span>
+              </li>
+              <li class="evaluation-item">
+                <span class="body-part">肩</span>
+                <span class="score bad" id="shoulderScore">2 不可</span>
+              </li>
+              <li class="evaluation-item">
+                <span class="body-part">肘</span>
+                <span class="score good" id="elbowScore">4 良好</span>
+              </li>
+              <li class="evaluation-item">
+                <span class="body-part">膝</span>
+                <span class="score normal" id="kneeScore">3 普通</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="btn btn-secondary" onclick="goBack()">戻る</button>
+          <button class="btn btn-primary" onclick="showDetailedAnalysis()">
+            詳細分析へ
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase設定 -->
+    <script>
+      // Firebase設定（main.jsと同じ設定）
+      const firebaseConfig = {
+        apiKey: "AIzaSyB1wvxKFWYbQJiPRXsbbhZJXtyfcL3HcEY",
+        authDomain: "basketball-ansys.firebaseapp.com",
+        projectId: "basketball-ansys",
+        storageBucket: "basketball-ansys.firebasestorage.app",
+        messagingSenderId: "940330605654",
+        appId: "1:940330605654:web:30b7443ba196cef5b72ff7",
+      };
+
+      // Firebase初期化（既に初期化されていない場合のみ）
+      if (typeof firebase !== "undefined" && !firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+        window.firebaseStorage = firebase.storage();
+        console.log("Firebase Storage initialized for analysis page");
+      }
+    </script>
+
+    <script src="analysis.js"></script>
+    <script src="auto-training-system.js"></script>
+    <script src="real-data-learning.js"></script>
+  </body>
+</html>

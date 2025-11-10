@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>バスケットボール姿勢分析 - ホーム</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <link rel="manifest" href="manifest.json" />
+    <style>
+      body {
+        font-family: "Segoe UI", "Meiryo", sans-serif;
+        background: linear-gradient(
+          135deg,
+          #9bb0ff 0%,
+          #8ba5ff 50%,
+          #a5b5ff 100%
+        );
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 50px;
+        color: white;
+      }
+
+      .header h1 {
+        font-size: 3rem;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .header p {
+        font-size: 1.2rem;
+        opacity: 0.9;
+      }
+
+      .main-content {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      .create-section {
+        text-align: center;
+        margin-bottom: 50px;
+        padding-bottom: 30px;
+        border-bottom: 2px solid #e0e6ff;
+      }
+
+      .create-section h2 {
+        color: #2e318f;
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+      }
+
+      .create-form {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .name-input {
+        padding: 12px 20px;
+        font-size: 1.1rem;
+        border: 2px solid #e0e6ff;
+        border-radius: 10px;
+        min-width: 250px;
+        outline: none;
+      }
+
+      .name-input:focus {
+        border-color: #2e318f;
+        box-shadow: 0 0 0 3px rgba(46, 49, 143, 0.1);
+      }
+
+      .create-btn {
+        padding: 12px 30px;
+        background: #2e318f;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .create-btn:hover {
+        background: #1e225c;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(46, 49, 143, 0.3);
+      }
+
+      .people-list-section h2 {
+        color: #2e318f;
+        font-size: 1.8rem;
+        margin-bottom: 30px;
+        text-align: center;
+      }
+
+      .people-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+      }
+
+      .person-card {
+        background: linear-gradient(135deg, #f8f9ff, #e8ecff);
+        border: 2px solid #e0e6ff;
+        border-radius: 15px;
+        padding: 25px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .person-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(46, 49, 143, 0.15);
+        border-color: #2e318f;
+      }
+
+      .person-avatar {
+        width: 80px;
+        height: 80px;
+        background: #2e318f;
+        border-radius: 50%;
+        margin: 0 auto 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+      }
+
+      .person-name {
+        font-size: 1.4rem;
+        font-weight: bold;
+        color: #2e318f;
+        margin-bottom: 10px;
+      }
+
+      .person-stats {
+        font-size: 0.9rem;
+        color: #666;
+        margin-bottom: 15px;
+      }
+
+      .person-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+
+      .action-btn {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .enter-btn {
+        background: #2e318f;
+        color: white;
+      }
+
+      .enter-btn:hover {
+        background: #1e225c;
+      }
+
+      .delete-btn {
+        background: #dc3545;
+        color: white;
+      }
+
+      .delete-btn:hover {
+        background: #c82333;
+      }
+
+      .login-area {
+        position: fixed;
+        top: 24px;
+        right: 32px;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 1.1rem;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 12px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+      }
+
+      .login-btn {
+        padding: 8px 18px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        background: #2e318f;
+        color: white;
+        transition: all 0.3s ease;
+      }
+
+      .login-btn:hover {
+        background: #1e225c;
+      }
+
+      .logout-btn {
+        padding: 8px 18px;
+        border-radius: 8px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: none;
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #666;
+        font-size: 1.1rem;
+        padding: 40px;
+      }
+
+      .empty-state-icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.3;
+      }
+
+      /* Analysis summary button styles */
+      .analysis-summary-section {
+        text-align: center;
+        margin-bottom: 24px;
+      }
+
+      .analysis-summary-btn {
+        padding: 12px 24px;
+        background: linear-gradient(135deg, #ffb54d, #ff8a4d);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.05rem;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .analysis-summary-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      }
+
+      /* When multiple top buttons exist, give a little spacing */
+      .top-button-row {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 20px 15px;
+        }
+
+        .header h1 {
+          font-size: 2rem;
+        }
+
+        .main-content {
+          padding: 25px;
+        }
+
+        .create-form {
+          flex-direction: column;
+        }
+
+        .name-input {
+          min-width: 200px;
+        }
+
+        .people-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .login-area {
+          position: static;
+          justify-content: center;
+          margin-bottom: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ログインエリア -->
+    <div class="login-area">
+      <span id="loginInfo">未ログイン</span>
+      <button id="loginBtn" class="login-btn">Googleでログイン</button>
+      <button id="switchAccountBtn" class="login-btn" style="display: none;">アカウント切り替え</button>
+      <button id="logoutBtn" class="logout-btn">ログアウト</button>
+    </div>
+
+    <div class="container">
+      <!-- ヘッダー -->
+      <div class="header">
+        <h1>バスケットボール姿勢分析</h1>
+        <p>選手ごとの動画管理と姿勢分析システム</p>
+      </div>
+
+      <div class="main-content">
+        <!-- (ボタン削除済) -->
+
+        <!-- 新規作成セクション -->
+        <div class="create-section">
+          <h2>👤 新しい選手を追加</h2>
+          <div class="create-form">
+            <input
+              type="text"
+              id="nameInput"
+              class="name-input"
+              placeholder="選手の名前を入力してください"
+              maxlength="20"
+            />
+            <button id="createBtn" class="create-btn">作成</button>
+          </div>
+        </div>
+
+        <!-- 選手一覧セクション -->
+        <div class="people-list-section">
+          <h2>📋 選手一覧</h2>
+          <div id="peopleGrid" class="people-grid">
+            <!-- JavaScript で動的に生成 -->
+          </div>
+          <div id="emptyState" class="empty-state" style="display: none">
+            <div class="empty-state-icon">🏀</div>
+            <p>まだ選手が登録されていません</p>
+            <p>上記のフォームから新しい選手を追加してください</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="home.js"></script>
+  </body>
+</html>
