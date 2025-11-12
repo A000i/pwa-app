@@ -465,7 +465,13 @@
           <div class="login-info-header">
             <span id="loginInfo">未ログイン</span>
             <button id="loginBtn" class="login-btn-header">ログイン</button>
-            <button id="switchAccountBtn" class="login-btn-header" style="display: none;">アカウント切り替え</button>
+            <button
+              id="switchAccountBtn"
+              class="login-btn-header"
+              style="display: none"
+            >
+              アカウント切り替え
+            </button>
             <button id="logoutBtn" class="logout-btn-header">ログアウト</button>
           </div>
           <!-- ナビゲーションボタン -->
@@ -492,6 +498,51 @@
             </div>
           </div>
           <input type="file" id="videoInput" accept="video/*" />
+          <!-- 先取りコメント: 動画アップロード前に残せるコメント（音声/テキスト） -->
+          <div style="margin-top: 16px">
+            <label
+              for="preCommentInput"
+              style="display: block; font-weight: bold; margin-bottom: 6px"
+              >アップロード前のメモ / コメント（音声可）</label
+            >
+            <textarea
+              id="preCommentInput"
+              rows="3"
+              style="
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid #ddd;
+              "
+              placeholder="ここに音声やテキストでコメントを残せます。動画アップロード時に紐づけ可能です。"
+            ></textarea>
+            <div
+              style="
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+                align-items: center;
+              "
+            >
+              <button
+                id="preVoiceBtn"
+                class="upload-btn"
+                style="width: auto; padding: 8px 12px"
+              >
+                🎤 音声
+              </button>
+              <button
+                id="savePreCommentBtn"
+                class="upload-btn"
+                style="width: auto; padding: 8px 12px; background: #4caf50"
+              >
+                💾 保存
+              </button>
+              <span id="pendingCount" style="margin-left: 12px; color: #666"
+                >保留コメント: 0 件</span
+              >
+            </div>
+          </div>
 
           <div class="upload-progress" id="uploadProgress">
             <div class="progress-bar">

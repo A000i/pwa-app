@@ -22,6 +22,41 @@ const storage = firebase.storage();
 let currentPerson = null;
 let currentUser = null;
 
+// pending comments key utilities (person-scoped)
+function getPendingKey(personId) {
+  return `pending_comments_${personId}`;
+}
+
+function loadPendingCommentsFromStorage(personId) {
+  const key = getPendingKey(personId);
+  try {
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePendingCommentsToStorage(personId, arr) {
+  const key = getPendingKey(personId);
+  localStorage.setItem(key, JSON.stringify(arr || []));
+}
+
+function addPendingComment(personId, text) {
+  if (!text) return;
+  const list = loadPendingCommentsFromStorage(personId);
+  list.push({ text, timestamp: new Date().toISOString() });
+  savePendingCommentsToStorage(personId, list);
+}
+
+function clearPendingComments(personId) {
+  const key = getPendingKey(personId);
+  localStorage.removeItem(key);
+}
+
+function getPendingCount(personId) {
+  return loadPendingCommentsFromStorage(personId).length;
+}
+
 // URLから選手情報を取得
 function getCurrentPersonFromUrl() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -86,7 +121,7 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
   const provider = new firebase.auth.GoogleAuthProvider();
   // アカウント選択を強制
   provider.setCustomParameters({
-    prompt: 'select_account'
+    prompt: "select_account",
   });
   try {
     await auth.signInWithPopup(provider);
@@ -97,22 +132,24 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
 });
 
 // アカウント切り替えボタンのイベント
-document.getElementById("switchAccountBtn").addEventListener("click", async () => {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // 強制的にアカウント選択画面を表示
-  provider.setCustomParameters({
-    prompt: 'select_account'
+document
+  .getElementById("switchAccountBtn")
+  .addEventListener("click", async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    // 強制的にアカウント選択画面を表示
+    provider.setCustomParameters({
+      prompt: "select_account",
+    });
+
+    try {
+      // 現在のセッションを一旦終了してから新しいアカウントでログイン
+      await auth.signOut();
+      await auth.signInWithPopup(provider);
+    } catch (error) {
+      console.error("アカウント切り替えエラー:", error);
+      alert("アカウント切り替えに失敗しました");
+    }
   });
-  
-  try {
-    // 現在のセッションを一旦終了してから新しいアカウントでログイン
-    await auth.signOut();
-    await auth.signInWithPopup(provider);
-  } catch (error) {
-    console.error("アカウント切り替えエラー:", error);
-    alert("アカウント切り替えに失敗しました");
-  }
-});
 
 // ログアウトボタンのイベント
 document.getElementById("logoutBtn").addEventListener("click", async () => {
@@ -281,6 +318,41 @@ async function uploadVideo(file) {
 
         // 動画一覧を再読み込み
         loadVideoList();
+
+        // アップロード直後に保留コメントがあれば紐づけ確認
+        const pending = loadPendingCommentsFromStorage(currentPerson.id);
+        if (pending && pending.length > 0) {
+          const confirmAttach = confirm(
+            `${pending.length} 件の保留コメントがあります。アップロードした動画「${file.name}」に紐づけますか？`
+          );
+          if (confirmAttach) {
+            // 送信処理
+            (async () => {
+              for (const item of pending) {
+                try {
+                  await db.collection("comments").add({
+                    text: item.text,
+                    user: currentUser
+                      ? currentUser.displayName || currentUser.email
+                      : "anonymous",
+                    video: file.name,
+                    timestamp: new Date(item.timestamp),
+                    personId: currentPerson.id,
+                  });
+                } catch (err) {
+                  console.error("保留コメントの送信に失敗しました:", err);
+                  alert(
+                    "保留コメントの送信に失敗しました。後で再試行してください。"
+                  );
+                  return;
+                }
+              }
+              // 成功したらクリア
+              clearPendingComments(currentPerson.id);
+              alert("保留コメントを動画に紐づけました。");
+            })();
+          }
+        }
 
         // ファイル選択をリセット
         document.getElementById("videoInput").value = "";
@@ -571,4 +643,76 @@ function showEmptyState() {
 // ページ読み込み時の初期化
 document.addEventListener("DOMContentLoaded", () => {
   console.log("個人動画管理ページが読み込まれました");
+  // Setup pre-comment UI interactions
+  const preVoiceBtn = document.getElementById("preVoiceBtn");
+  const savePreCommentBtn = document.getElementById("savePreCommentBtn");
+  const preCommentInput = document.getElementById("preCommentInput");
+  const pendingCount = document.getElementById("pendingCount");
+
+  function refreshPendingCount() {
+    if (!currentPerson || !currentPerson.id) return;
+    const c = getPendingCount(currentPerson.id);
+    if (pendingCount) pendingCount.textContent = `保留コメント: ${c} 件`;
+  }
+
+  refreshPendingCount();
+
+  if (savePreCommentBtn) {
+    savePreCommentBtn.addEventListener("click", () => {
+      const text = preCommentInput.value.trim();
+      if (!text) {
+        alert("コメントを入力してください");
+        return;
+      }
+      addPendingComment(currentPerson.id, text);
+      preCommentInput.value = "";
+      refreshPendingCount();
+      alert(
+        "コメントを保留として保存しました（動画アップロード時に紐づけ可能）。"
+      );
+    });
+  }
+
+  // Basic speech recognition for preVoiceBtn (transcribe into textarea)
+  if (preVoiceBtn) {
+    preVoiceBtn.addEventListener("click", async () => {
+      if (
+        !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
+      ) {
+        alert("このブラウザは音声認識をサポートしていません");
+        return;
+      }
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SpeechRecognition();
+      rec.lang = "ja-JP";
+      rec.continuous = false;
+      rec.interimResults = false;
+      preVoiceBtn.disabled = true;
+      preVoiceBtn.textContent = "🎤 録音中...";
+      rec.onresult = (ev) => {
+        let t = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          t += ev.results[i][0].transcript;
+        }
+        preCommentInput.value =
+          (preCommentInput.value ? preCommentInput.value + " " : "") + t;
+      };
+      rec.onerror = (ev) => {
+        console.error("音声認識エラー", ev);
+        alert("音声認識エラーが発生しました");
+      };
+      rec.onend = () => {
+        preVoiceBtn.disabled = false;
+        preVoiceBtn.textContent = "🎤 音声録音";
+      };
+      try {
+        rec.start();
+      } catch (e) {
+        console.error(e);
+        preVoiceBtn.disabled = false;
+        preVoiceBtn.textContent = "🎤 音声録音";
+      }
+    });
+  }
 });

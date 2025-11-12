@@ -312,6 +312,52 @@ function loadVideoFromURL(url) {
 
   // コメントを読み込み
   loadComments();
+
+  // 動画が読み込まれたら、同一選手の保留コメントがあれば紐づけ確認ダイアログを表示
+  try {
+    const key = `pending_comments_${currentPerson.id}`;
+    const pending = JSON.parse(localStorage.getItem(key) || "[]");
+    if (pending && pending.length > 0) {
+      // 確認ダイアログ
+      const attach = confirm(
+        `${pending.length} 件の保留コメントがあります。動画「${currentVideoFilename}」に紐づけますか？`
+      );
+      if (attach) {
+        if (!currentUser) {
+          alert("紐づけにはログインが必要です。ログインしてください");
+          return;
+        }
+
+        (async () => {
+          for (const item of pending) {
+            try {
+              await db.collection("comments").add({
+                text: item.text,
+                user: currentUser
+                  ? currentUser.displayName || currentUser.email
+                  : "anonymous",
+                video: currentVideoFilename,
+                timestamp: new Date(item.timestamp),
+                personId: currentPerson.id,
+              });
+            } catch (err) {
+              console.error("保留コメントの送信に失敗しました:", err);
+              alert(
+                "保留コメントの送信に失敗しました。後で再試行してください。"
+              );
+              return;
+            }
+          }
+          // すべて送信成功したらローカルをクリアしてコメントを再読み込み
+          localStorage.removeItem(key);
+          loadComments();
+          alert("保留コメントを動画に紐づけました。");
+        })();
+      }
+    }
+  } catch (e) {
+    console.error("保留コメント確認エラー:", e);
+  }
 }
 
 // ナビゲーション関数
